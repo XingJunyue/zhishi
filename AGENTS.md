@@ -23,7 +23,7 @@
 - 预览包关闭应用内更新：非 main 分支给 gradle 传 `-Ppreview`（env `PV`），`BuildConfig.PREVIEW=true`；`Updater.enabled()` = `!PREVIEW`。构建后 grep `BuildConfig.java` 核对，单测 `TourAndUpdaterTest` 也测。
 - 更新器读 `Updater.REPO = "XingJunyue/zhishi"` 的 releases（tag `build-N`、资产 `zhishi-1.N.apk`），直连失败走镜像。仓库是私有的时候拿不到（界面会提示「仓库还没公开」）。
 - 只文档改动推 main 时提交信息加 `[skip ci]`，避免多发一个版本。
-- 签名：密钥不在仓库里。CI 从 Actions secrets `KS_B64`（p12 的 base64）和 `KS_PASS` 还原，别名 `zhishi`；本地构建设 env `KS_FILE`/`KS_PASS`。仓库是公开的，绝不能把 p12 或密码提交进来。换密钥会导致老用户无法覆盖安装。
+- 签名：密钥不在仓库里。CI 用 Actions secret `KS_PASS` 解密 `signing/zhishi.p12.enc`（openssl aes-256-cbc pbkdf2 20万次）还原，别名 `zhishi`；本地构建设 env `KS_FILE`/`KS_PASS`。仓库是公开的，绝不能把 p12 或密码提交进来。换密钥会导致老用户无法覆盖安装。
 
 ## 每个版本都要有应用内教程
 - 首次安装：可跳过的完整引导（`Tour.FIRST`）。

@@ -19,12 +19,8 @@ jobs:
       - uses: gradle/actions/setup-gradle@v3
         with: { gradle-version: '8.14.3' }
       - name: Signing key
-        env: { KS_B64: "${{ secrets.KS_B64 }}" }
         run: |
-          c=$(printf %s "$KS_B64" | tr -d " \r\n\t")
-          echo "len=${#c} head=${c:0:8} tail=${c: -8} bad=$(printf %s "$c" | tr -d 'A-Za-z0-9+/=' | wc -c) pass_len=${#KS_PASS}"
-          printf %s "$c" | base64 -d > "$RUNNER_TEMP/zhishi.p12"
-          ls -l "$RUNNER_TEMP/zhishi.p12"
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in signing/zhishi.p12.enc -out "$RUNNER_TEMP/zhishi.p12" -pass env:KS_PASS
           echo "KS_FILE=$RUNNER_TEMP/zhishi.p12" >> "$GITHUB_ENV"
       - name: Unit tests
         run: gradle :app:testDebugUnitTest $PV --no-daemon
