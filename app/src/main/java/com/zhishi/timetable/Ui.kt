@@ -301,7 +301,7 @@ fun RainArt(modifier: Modifier = Modifier, size: Dp = 150.dp) {
 /** 文字输入框：圆角浅底。 */
 @Composable
 fun FieldBox(value: String, hint: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, big: Boolean = false) {
-    Box(modifier.fillMaxWidth().liquidGlass(RoundedCornerShape(18.dp), shadow = 0.dp).padding(horizontal = 16.dp, vertical = 13.dp)) {
+    Box(modifier.fillMaxWidth().liquidGlass(RoundedCornerShape(18.dp), fill = Glass.field(), shadow = 0.dp).padding(horizontal = 16.dp, vertical = 13.dp)) {
         if (value.isEmpty()) Text(hint, fontSize = if (big) 16.sp else 14.sp, color = C.Faint)
         androidx.compose.foundation.text.BasicTextField(value, onChange, singleLine = true,
             cursorBrush = androidx.compose.ui.graphics.SolidColor(C.Clay),

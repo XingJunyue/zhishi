@@ -144,13 +144,14 @@ private fun BottomBar(cur: String, m: Modifier, go: (String) -> Unit) {
     val shape = CircleShape
     Row(
         m.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth()
-            .liquidGlass(shape, Glass.BAR, shadow = 10.dp).padding(horizontal = 6.dp, vertical = 6.dp),
+            .liquidGlass(shape, Glass.BAR, fill = Glass.bar(), shadow = 10.dp).padding(horizontal = 6.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         for ((id, label, icons) in items) {
             val on = id == cur
-            val tint by animateColorAsState(if (on) C.ClayDeep else C.Faint, label = "tab")
-            val pill by animateColorAsState(if (on) Color.White.copy(alpha = if (C.dark) 0.12f else 0.42f) else Color.Transparent, label = "pill")
+            // 没选中的用 Soft（比 Faint 深 / 亮一档），压在课表格子上也读得清
+            val tint by animateColorAsState(if (on) C.ClayDeep else C.Soft, label = "tab")
+            val pill by animateColorAsState(if (on) (if (C.dark) Color.White.copy(alpha = 0.13f) else androidx.compose.ui.graphics.lerp(Color.White, C.Clay, 0.12f).copy(alpha = 0.85f)) else Color.Transparent, label = "pill")
             Column(Modifier.weight(1f).clip(CircleShape).background(pill).clickable { go(id) }.padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(if (on) icons.first else icons.second, null, tint = tint, modifier = Modifier.size(24.dp))

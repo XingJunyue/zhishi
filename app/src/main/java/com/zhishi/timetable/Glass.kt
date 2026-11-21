@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
  *  - 顶部一层柔光：白 ~26% 往下 42% 高度内淡到 0；
  *  - 底边一点点折射暗边；
  *  - 很轻的投影（只画在形状外面，透明底下面不会发脏）。
- * level：0 = 最清透（卡片、按钮、课块），越大越实（导航条 ~0.55，弹窗 / 底部弹出 = 1，要压住后面复杂内容时用）。
+ * level：0 = 最清透（卡片、按钮、课块），越大越实（弹窗 / 底部弹出 = 1，~97% 不透明，要压住后面复杂内容时用）；导航条用 Glass.bar()。
  * 内容会按形状裁剪（点击水波纹也是），所以调用处不用再 clip。
  */
 object Glass {
@@ -49,8 +49,25 @@ object Glass {
         val dark = C.dark
         val clear = lerp(Color.White, tint, if (dark) 0.22f else 0.10f).copy(alpha = if (dark) 0.10f else 0.16f)
         if (level <= 0f) return clear
-        val solid = lerp(C.Card, tint, if (dark) 0.06f else 0.04f).copy(alpha = if (dark) 0.92f else 0.94f)
+        // 厚玻璃 ~97%：原来 92–94% 时，后面课表 / 待办列表的深色字（对比度大）在纯色底上仍有 6–8% 透出来，
+        // 一整片干净的底上看得出残影；再配上 GlassSheet 加重的遮罩，残影降到 1% 左右，肉眼看不出。
+        val solid = lerp(C.Card, tint, if (dark) 0.06f else 0.04f).copy(alpha = 0.97f)
         return lerp(clear, solid, level.coerceIn(0f, 1f))
+    }
+
+    /**
+     * 底部导航条的底：直接从皮肤卡片色出发（不和白色清透层混，深色下不会发灰），
+     * 深色 ~84%、浅色 ~76% 不透明，后面的课表格子只隐约可见，没选中的字也读得清。
+     */
+    fun bar(tint: Color = C.Clay): Color {
+        val dark = C.dark
+        return lerp(C.Card, tint, if (dark) 0.08f else 0.05f).copy(alpha = if (dark) 0.84f else 0.76f)
+    }
+
+    /** 输入框的底：比厚玻璃再略深一点的皮肤色，几乎不透（后面什么都透不过来），和底部弹出区分开。 */
+    fun field(): Color {
+        val dark = C.dark
+        return lerp(C.Card, C.Sand, if (dark) 0.85f else 0.65f).copy(alpha = 0.96f)
     }
 }
 
@@ -135,6 +152,8 @@ fun GlassSheet(
     androidx.compose.material3.ModalBottomSheet(
         onDismissRequest = onDismissRequest, sheetState = sheetState, shape = SheetShape,
         containerColor = Color.Transparent, contentColor = C.Ink, tonalElevation = 0.dp, dragHandle = null,
+        // 遮罩加重一点（默认黑 32%）：弹出层下面的列表先被压暗，再透过 97% 的玻璃就看不出字了
+        scrimColor = Color.Black.copy(alpha = if (C.dark) 0.55f else 0.42f),
     ) {
         androidx.compose.foundation.layout.Column(Modifier.fillMaxWidth().liquidGlass(SheetShape, Glass.THICK, shadow = 0.dp)) {
             Box(Modifier.align(Alignment.CenterHorizontally).padding(top = 12.dp, bottom = 10.dp).size(36.dp, 4.dp)
