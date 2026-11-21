@@ -36,12 +36,12 @@ import androidx.compose.ui.unit.dp
  *  - 顶部一层柔光：白 ~26% 往下 42% 高度内淡到 0；
  *  - 底边一点点折射暗边；
  *  - 很轻的投影（只画在形状外面，透明底下面不会发脏）。
- * level：0 = 最清透（卡片、按钮、课块），越大越实（导航条 ~0.35，弹窗 / 底部弹出 = 1，要压住后面复杂内容时用）。
+ * level：0 = 最清透（卡片、按钮、课块），越大越实（导航条 ~0.55，弹窗 / 底部弹出 = 1，要压住后面复杂内容时用）。
  * 内容会按形状裁剪（点击水波纹也是），所以调用处不用再 clip。
  */
 object Glass {
     const val CLEAR = 0f
-    const val BAR = 0.35f
+    const val BAR = 0.55f
     const val THICK = 1f
 
     /** 某一档玻璃的底色。tint = 染色（默认皮肤主色）。 */
@@ -49,7 +49,7 @@ object Glass {
         val dark = C.dark
         val clear = lerp(Color.White, tint, if (dark) 0.22f else 0.10f).copy(alpha = if (dark) 0.10f else 0.16f)
         if (level <= 0f) return clear
-        val solid = lerp(C.Card, tint, if (dark) 0.06f else 0.04f).copy(alpha = if (dark) 0.80f else 0.82f)
+        val solid = lerp(C.Card, tint, if (dark) 0.06f else 0.04f).copy(alpha = if (dark) 0.92f else 0.94f)
         return lerp(clear, solid, level.coerceIn(0f, 1f))
     }
 }
