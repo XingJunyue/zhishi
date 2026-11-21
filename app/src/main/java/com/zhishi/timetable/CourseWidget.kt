@@ -156,8 +156,11 @@ object CourseWidgets {
         val cv = Canvas(b); cv.scale(px, px)
         val d = D(cv)
         val free = now.main == null
-        d.round(0f, 0f, lw, lh, 22f, if (free) FREE_BG else CREAM)
+        d.halo = if (DARK) 0x99000000.toInt() else 0xBFFFFFFF.toInt()
+        // 液态玻璃底：很透的皮肤底色（桌面壁纸透出来），淡淡一层插画，顶部水光、底边暗边、左上亮右下淡的亮边。不模糊。
+        glassCard(cv, lw, lh)
         faintArt(c, cv, lw, lh)
+        glassShine(cv, lw, lh, R_CARD, 1.2f)
         when {
             free -> freeCard(d, lw, lh, wide, now.doneAll)
             wide -> wideCard(c, d, lw, lh, now, all)
@@ -182,20 +185,73 @@ object CourseWidgets {
     private fun faintArt(c: Context, cv: Canvas, lw: Float, lh: Float) {
         val a = art(c) ?: return
         val srcH = (a.width * lh / lw).toInt().coerceIn(1, a.height)
-        val clip = Path().apply { addRoundRect(RectF(0f, 0f, lw, lh), 22f, 22f, Path.Direction.CW) }
+        val clip = Path().apply { addRoundRect(RectF(0f, 0f, lw, lh), R_CARD, R_CARD, Path.Direction.CW) }
         cv.save(); cv.clipPath(clip)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = if (DARK) 120 else 110 }
+        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = if (DARK) 64 else 56 }
         cv.drawBitmap(a, android.graphics.Rect(0, 0, a.width, srcH), RectF(0f, 0f, lw, lh), p)
         cv.restore()
+    }
+
+    private const val R_CARD = 26f
+
+    /** 卡片的玻璃底色：皮肤底色，浅色 ~34%、深色 ~44% 不透明，往主色偏一点点。 */
+    private fun glassCard(cv: Canvas, w: Float, h: Float) {
+        val fill = mix(PAL.i(PAL.bg), PAL.i(PAL.acc), 0.06f)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(fill, if (DARK) 0.44f else 0.34f) }
+        cv.drawRoundRect(RectF(0f, 0f, w, h), R_CARD, R_CARD, p)
+    }
+
+    /** 玻璃的光：顶部柔光（白 ~28% → 0，42% 高度内）、底边一点暗边（折射）、渐变亮边（左上亮 → 右下淡）。 */
+    private fun glassShine(cv: Canvas, w: Float, h: Float, r: Float, rim: Float, l: Float = 0f, t: Float = 0f, strong: Float = 1f) {
+        val rect = RectF(l, t, l + w, t + h)
+        val clip = Path().apply { addRoundRect(rect, r, r, Path.Direction.CW) }
+        cv.save(); cv.clipPath(clip)
+        val hi = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.LinearGradient(0f, t, 0f, t + h * 0.42f,
+                withAlpha(0xFFFFFFFF.toInt(), (if (DARK) 0.14f else 0.28f) * strong), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+        }
+        cv.drawRect(rect, hi)
+        val lo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.LinearGradient(0f, t + h * 0.72f, 0f, t + h,
+                0x00000000, withAlpha(if (DARK) 0xFF000000.toInt() else mix(0xFF000000.toInt(), PAL.i(PAL.acc), 0.5f), (if (DARK) 0.20f else 0.07f) * strong),
+                android.graphics.Shader.TileMode.CLAMP)
+        }
+        cv.drawRect(rect, lo)
+        // 亮边：描边一半在形状里
+        val rp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            style = Paint.Style.STROKE; strokeWidth = rim * 2f
+            shader = android.graphics.LinearGradient(l, t, l + w, t + h,
+                intArrayOf(withAlpha(-1, if (DARK) 0.45f else 0.78f), withAlpha(-1, if (DARK) 0.10f else 0.24f), withAlpha(-1, if (DARK) 0.06f else 0.12f)),
+                floatArrayOf(0f, 0.45f, 1f), android.graphics.Shader.TileMode.CLAMP)
+        }
+        cv.drawRoundRect(rect, r, r, rp)
+        cv.restore()
+        // 外侧极淡的暗线，浅色壁纸上也看得出边
+        val hair = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 0.6f; color = withAlpha(0xFF000000.toInt(), if (DARK) 0.25f else 0.08f) }
+        cv.drawRoundRect(rect, r, r, hair)
+    }
+
+    private fun withAlpha(c: Int, a: Float): Int = (((c ushr 24) * a.coerceIn(0f, 1f)).toInt() shl 24) or (c and 0x00FFFFFF)
+    private fun mix(a: Int, b: Int, k: Float): Int {
+        fun ch(s: Int) = (((a shr s) and 0xFF) * (1 - k) + ((b shr s) and 0xFF) * k).toInt().coerceIn(0, 255)
+        return (0xFF shl 24) or (ch(16) shl 16) or (ch(8) shl 8) or ch(0)
     }
 
     private class D(val cv: Canvas) {
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
         val t = TextPaint(Paint.ANTI_ALIAS_FLAG)
+        /** 字后面的淡光晕（玻璃很透，壁纸花的时候也读得清）。 */
+        var halo = 0
+        /** 小玻璃块（下一节、标签）：半透的底 + 顶部柔光 + 亮边。 */
+        fun glass(l: Float, tp: Float, r: Float, bt: Float, rad: Float, col: Int, a: Float) {
+            round(l, tp, r, bt, rad, CourseWidgets.withAlpha(col, a))
+            CourseWidgets.glassShine(cv, r - l, bt - tp, rad, 0.8f, l, tp, 0.8f)
+        }
         fun round(l: Float, tp: Float, r: Float, bt: Float, rad: Float, col: Int) { p.style = Paint.Style.FILL; p.color = col; cv.drawRoundRect(RectF(l, tp, r, bt), rad, rad, p) }
         /** 画一行字，(x, top) 为左上角；align 0 左、1 居中、2 右；放不下就省略号。返回宽度。 */
         fun text(s: String, x: Float, top: Float, size: Float, col: Int, bold: Boolean = false, align: Int = 0, maxW: Float = 9999f): Float {
             t.textSize = size; t.color = col; t.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            if (halo != 0) t.setShadowLayer(2.4f, 0f, 0f, halo) else t.clearShadowLayer()
             val e = TextUtils.ellipsize(s, t, maxW, TextUtils.TruncateAt.END).toString()
             val w = t.measureText(e)
             val fm = t.fontMetrics
@@ -207,7 +263,7 @@ object CourseWidgets {
         fun chip(s: String, x: Float, top: Float, size: Float, fg: Int, bg: Int, bold: Boolean = false, right: Boolean = false): Float {
             val w = width(s, size, bold) + 12f; val h = size + 8f
             val l = if (right) x - w else x
-            round(l, top, l + w, top + h, h / 2, bg); text(s, l + w / 2, top + 4f - size * 0.09f, size, fg, bold, 1); return w
+            round(l, top, l + w, top + h, h / 2, CourseWidgets.withAlpha(bg, 0.85f)); text(s, l + w / 2, top + 4f - size * 0.09f, size, fg, bold, 1); return w
         }
         fun bar(l: Float, cy: Float, r: Float, h: Float, frac: Float, track: Int, fill: Int) {
             round(l, cy - h / 2, r, cy + h / 2, h / 2, track)
@@ -283,7 +339,7 @@ object CourseWidgets {
         // 下一节
         n.next?.let { nx ->
             val ny = h - p - nextH
-            d.round(L, ny, R, h - p, 12f, NEXT_BG)
+            d.glass(L, ny, R, h - p, 14f, NEXT_BG, if (DARK) 0.55f else 0.5f)
             val q = L + 11f
             val head = tr("下一节 {0}", hm(nx.from)) + (secText(c, nx)?.let { " · $it" } ?: "")
             d.text(head, q, ny + 6f, 10f, NEXT_FG, true, maxW = w * 0.55f)
@@ -317,7 +373,7 @@ object CourseWidgets {
         val ny = py + 9f
         val nb = h - p
         if (nb - ny < 26f) return
-        d.round(L, ny, R, nb, 11f, NEXT_BG)
+        d.glass(L, ny, R, nb, 13f, NEXT_BG, if (DARK) 0.55f else 0.5f)
         val nx = n.next
         if (nx == null) { d.text(tr("这是今天最后一节"), (L + R) / 2, ny + (nb - ny) / 2 - 7f, 10f, NEXT_FG, true, 1); return }
         d.text(tr("下一节 {0}", hm(nx.from)) + (if (nx.room.isNotBlank()) " · " + nx.room else ""), L + 9f, ny + 5f, 9f, NEXT_FG, true, maxW = R - L - 18f)

@@ -321,7 +321,7 @@ fun UpdatePrompt() {
     AlertDialog(
         onDismissRequest = { if (state != "downloading") quit() },
         properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false),
-        containerColor = C.Card,
+        containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = 0.dp, shape = DialogShape, modifier = dialogGlass(),
         title = { Text(tr("发现新版本 {0}", r.name), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink) },
         text = {
             Column {

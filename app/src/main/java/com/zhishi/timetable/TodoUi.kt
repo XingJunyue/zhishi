@@ -75,11 +75,11 @@ fun TodoScreen() {
                 Text(if (g.today.isEmpty() && g.upcoming.isEmpty()) tr("都做完啦") else tr("今天 {0} 项 · 之后 {1} 项", g.today.size, g.upcoming.size),
                     fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 2.dp))
             }
-            Box(Modifier.size(42.dp).clip(CircleShape).background(C.Glass).border(1.dp, C.GlassEdge, CircleShape).clickable { edit = newTodo() to true },
+            Box(Modifier.size(42.dp).liquidGlass(CircleShape).clickable { edit = newTodo() to true },
                 contentAlignment = Alignment.Center) { Icon(Icons.Filled.Add, tr("添加待办"), tint = C.Ink, modifier = Modifier.size(22.dp)) }
         }
         if (all.isEmpty()) {
-            Column(Modifier.padding(22.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(C.Glass).border(1.dp, C.GlassEdge, RoundedCornerShape(24.dp)).padding(22.dp),
+            Column(Modifier.padding(22.dp).fillMaxWidth().liquidGlass(RoundedCornerShape(24.dp)).padding(22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 RainArt(size = 110.dp)
                 Text(tr("还没有待办"), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 4.dp))
@@ -114,7 +114,7 @@ fun TodoScreen() {
 fun TodoRow(t: Todo, now: Long, onToggle: () -> Unit, onOpen: () -> Unit, onDelete: (() -> Unit)?) {
     val body = @Composable {
         val late = Todos.overdue(t, now)
-        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(18.dp)).background(C.Glass).border(1.dp, C.GlassEdge, RoundedCornerShape(18.dp))
+        Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).liquidGlass(RoundedCornerShape(18.dp))
             .clickable { onOpen() }.padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             val ring by animateColorAsState(if (t.done) C.Clay else C.Faint, label = "ring")
             Box(Modifier.size(24.dp).clip(CircleShape).background(if (t.done) C.Clay else Color.Transparent).border(1.8.dp, ring, CircleShape).clickable { onToggle() },
@@ -159,7 +159,7 @@ fun TodoSheet(start: Todo, isNew: Boolean, onSave: (Todo) -> Unit, onDelete: () 
     val perm = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { ok ->
         if (!ok) { t = t.copy(remind = false); hint = tr("没有通知权限，提醒发不出来。可以在系统设置里打开。") }
     }
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Card) {
+    GlassSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 22.dp).padding(bottom = 20.dp).navigationBarsPadding().imePadding().verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (isNew) tr("添加待办") else tr("编辑待办"), fontSize = 21.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
@@ -212,7 +212,7 @@ fun TodoSheet(start: Todo, isNew: Boolean, onSave: (Todo) -> Unit, onDelete: () 
     pickTime?.let { day ->
         val init = if (t.due >= 0) Todos.minuteOf(t.due) else 22 * 60
         val st = rememberTimePickerState(init / 60, init % 60, is24Hour = true)
-        AlertDialog(onDismissRequest = { pickTime = null }, containerColor = C.Card,
+        AlertDialog(onDismissRequest = { pickTime = null }, containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = 0.dp, shape = DialogShape, modifier = dialogGlass(),
             title = { Text(tr("截止时间"), color = C.Ink, fontSize = 16.sp) },
             text = { TimePicker(st, colors = TimePickerDefaults.colors(selectorColor = C.Clay, timeSelectorSelectedContainerColor = C.ClayPale,
                 timeSelectorSelectedContentColor = C.ClayDeep, clockDialColor = C.Sand)) },

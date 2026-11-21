@@ -78,8 +78,15 @@ class TodoTest {
     }
 
     @Test fun whatsNewHasRedesign() {
-        assertEquals("redesign", Tour.WHATS_NEW.first().id)
-        val txt = Tour.WHATS_NEW.first().pages.joinToString { it.title + it.body }
+        val r = Tour.WHATS_NEW.first { it.id == "redesign" }
+        val txt = r.pages.joinToString { it.title + it.body }
         assertTrue(txt.contains("待办") && txt.contains("日历"))
+    }
+
+    @Test fun whatsNewNewestIsGlass() {
+        assertEquals("glass", Tour.WHATS_NEW.first().id)
+        val txt = Tour.WHATS_NEW.first().pages.joinToString { it.title + it.body }
+        assertTrue(txt.contains("液态玻璃") && txt.contains("导入"))
+        assertEquals(Tour.WHATS_NEW.size, Tour.WHATS_NEW.map { it.id }.toSet().size)
     }
 }

@@ -58,7 +58,13 @@ fun ZhishiTheme(content: @Composable () -> Unit) {
         headlineSmall = base.headlineSmall.copy(fontWeight = FontWeight.Bold),
         titleLarge = base.titleLarge.copy(fontWeight = FontWeight.Bold),
     )
-    MaterialTheme(colorScheme = scheme(), shapes = Shapes3, typography = typo, content = content)
+    MaterialTheme(colorScheme = scheme(), shapes = Shapes3, typography = typo) {
+        // 液态玻璃很透：字后面衬一圈很淡的光晕（浅色白、深色黑），插画花哨的地方也读得清
+        val halo = androidx.compose.ui.graphics.Shadow(
+            color = if (C.dark) Color.Black.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.7f),
+            offset = Offset.Zero, blurRadius = 6f)
+        CompositionLocalProvider(LocalTextStyle provides LocalTextStyle.current.copy(shadow = halo), content = content)
+    }
 }
 
 /** 页面大标题：衬线、略带字距。 */
@@ -72,12 +78,11 @@ fun PageTitle(t: String, sub: String? = null, modifier: Modifier = Modifier) {
 
 @Composable
 fun SoftCard(modifier: Modifier = Modifier, brush: Brush? = null, pad: Dp = 18.dp, content: @Composable ColumnScope.() -> Unit) {
-    val shape = RoundedCornerShape(22.dp)
+    val shape = RoundedCornerShape(24.dp)
     Column(
         modifier
-            .clip(shape)
-            .then(if (brush != null) Modifier.background(brush) else Modifier.background(C.Glass))
-            .border(1.dp, C.GlassEdge, shape)
+            .liquidGlass(shape)
+            .then(if (brush != null) Modifier.background(brush) else Modifier)
             .padding(pad),
         content = content
     )
@@ -88,25 +93,28 @@ fun Chip(text: String, warm: Boolean = false) {
     Text(
         text, fontSize = 12.sp,
         color = if (warm) C.ClayDeep else C.SageInk,
-        modifier = Modifier.padding(top = 8.dp, end = 6.dp).clip(RoundedCornerShape(20.dp))
-            .background(if (warm) C.ClayPale else C.SagePale).padding(horizontal = 10.dp, vertical = 4.dp)
+        modifier = Modifier.padding(top = 8.dp, end = 6.dp)
+            .liquidGlass(CircleShape, tint = if (warm) C.Clay else C.Sage, fill = (if (warm) C.ClayPale else C.SagePale).copy(alpha = 0.55f), shadow = 0.dp)
+            .padding(horizontal = 10.dp, vertical = 4.dp)
     )
 }
 
 @Composable
 fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean = true, onClick: () -> Unit) {
-    Button(
-        onClick, modifier.fillMaxWidth().height(52.dp), enabled = enabled,
-        shape = RoundedCornerShape(18.dp),
-        colors = ButtonDefaults.buttonColors(containerColor = C.Clay, contentColor = C.OnClay, disabledContainerColor = C.Track, disabledContentColor = C.Faint),
-        elevation = ButtonDefaults.buttonElevation(0.dp, 0.dp)
-    ) { Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp) }
+    // 主色染的玻璃胶囊：主色半透，带亮边和顶部水光
+    Box(
+        modifier.fillMaxWidth().height(52.dp)
+            .liquidGlass(CircleShape, tint = C.Clay, fill = if (enabled) C.Clay.copy(alpha = 0.86f) else C.Track.copy(alpha = 0.6f), shadow = if (enabled) 8.dp else 0.dp)
+            .clickable(enabled = enabled) { onClick() },
+        contentAlignment = Alignment.Center
+    ) { Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp, color = if (enabled) C.OnClay else C.Faint,
+        style = LocalTextStyle.current.copy(shadow = null)) }
 }
 
 /** 次要按钮：浅底主色字。 */
 @Composable
 fun GhostButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier.height(48.dp).clip(RoundedCornerShape(16.dp)).background(C.ClayPale).clickable { onClick() }.padding(horizontal = 18.dp),
+    Box(modifier.height(48.dp).liquidGlass(CircleShape, shadow = 4.dp).clickable { onClick() }.padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center) {
         Text(text, fontSize = 14.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold)
     }
@@ -133,13 +141,13 @@ fun Every(ms: Long, now: Boolean = true, block: () -> Unit) {
 
 @Composable
 fun Segments(options: List<String>, sel: Int, onSel: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Sand).padding(4.dp)) {
+    Row(Modifier.fillMaxWidth().liquidGlass(CircleShape, shadow = 0.dp).padding(4.dp)) {
         options.forEachIndexed { i, t ->
             val on = i == sel
-            val bg by animateColorAsState(if (on) C.Card else Color.Transparent, label = "seg")
+            val bg by animateColorAsState(if (on) C.Card.copy(alpha = if (C.dark) 0.45f else 0.7f) else Color.Transparent, label = "seg")
             val fg by animateColorAsState(if (on) C.ClayDeep else C.Soft, label = "segT")
             Box(
-                Modifier.weight(1f).clip(RoundedCornerShape(12.dp)).background(bg).clickable { onSel(i) }.padding(vertical = 9.dp),
+                Modifier.weight(1f).clip(CircleShape).background(bg).clickable { onSel(i) }.padding(vertical = 9.dp),
                 contentAlignment = Alignment.Center
             ) { Text(t, fontSize = 13.sp, color = fg, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1) }
         }
@@ -172,8 +180,9 @@ fun StepSlider(label: String, value: Int, range: IntRange, step: Int, unit: Stri
 fun Note(t: String, warm: Boolean = false) {
     Text(
         t, fontSize = 13.sp, color = if (warm) C.ClayDeep else C.SageInk, lineHeight = 21.sp,
-        modifier = Modifier.padding(top = 14.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp))
-            .background(if (warm) C.ClayPale else C.SagePale).padding(horizontal = 14.dp, vertical = 12.dp)
+        modifier = Modifier.padding(top = 14.dp).fillMaxWidth()
+            .liquidGlass(RoundedCornerShape(18.dp), tint = if (warm) C.Clay else C.Sage, fill = (if (warm) C.ClayPale else C.SagePale).copy(alpha = 0.5f), shadow = 0.dp)
+            .padding(horizontal = 14.dp, vertical = 12.dp)
     )
 }
 
@@ -228,7 +237,7 @@ fun Backdrop(modifier: Modifier = Modifier) {
 /** 二级页面左上角的返回按钮。 */
 @Composable
 fun BackButton(onBack: () -> Unit) {
-    Box(Modifier.size(40.dp).clip(CircleShape).background(C.Glass).clickable { onBack() }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(40.dp).liquidGlass(CircleShape, shadow = 4.dp).clickable { onBack() }, contentAlignment = Alignment.Center) {
         val ink = C.Ink
         Canvas(Modifier.size(18.dp)) {
             val w = size.width; val sw = w * 0.11f
@@ -292,7 +301,7 @@ fun RainArt(modifier: Modifier = Modifier, size: Dp = 150.dp) {
 /** 文字输入框：圆角浅底。 */
 @Composable
 fun FieldBox(value: String, hint: String, onChange: (String) -> Unit, modifier: Modifier = Modifier, big: Boolean = false) {
-    Box(modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Sand).padding(horizontal = 16.dp, vertical = 13.dp)) {
+    Box(modifier.fillMaxWidth().liquidGlass(RoundedCornerShape(18.dp), shadow = 0.dp).padding(horizontal = 16.dp, vertical = 13.dp)) {
         if (value.isEmpty()) Text(hint, fontSize = if (big) 16.sp else 14.sp, color = C.Faint)
         androidx.compose.foundation.text.BasicTextField(value, onChange, singleLine = true,
             cursorBrush = androidx.compose.ui.graphics.SolidColor(C.Clay),

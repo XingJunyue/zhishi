@@ -39,7 +39,7 @@ internal fun ReviewSheet(found: List<Slot>, shot: android.net.Uri?, onAdd: (List
             c.contentResolver.openInputStream(u)?.use { android.graphics.BitmapFactory.decodeStream(it, null, o) }?.asImageBitmap()
         } catch (x: Exception) { null } }
     }
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Card) {
+    GlassSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
             Text(if (items.isEmpty()) tr("自己填课表") else tr("认出 {0} 节课", items.size), fontSize = 21.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink)
             Text(tr("对照截图核对：点一行可以改课名、星期、节次和时间，漏掉的点「补一节」，不要的取消勾选"), fontSize = 12.sp, color = C.Faint, lineHeight = 18.sp, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))
@@ -95,7 +95,7 @@ internal fun ReviewSheet(found: List<Slot>, shot: android.net.Uri?, onAdd: (List
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun CalendarPick(cals: List<Pair<Long, String>>, onPick: (Long) -> Unit, onClose: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onClose, containerColor = C.Card) {
+    GlassSheet(onDismissRequest = onClose) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding()) {
             Text(tr("选课表所在的日历"), fontSize = 21.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink)
             Text(tr("其他课表 App 可以先同步到系统日历"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))

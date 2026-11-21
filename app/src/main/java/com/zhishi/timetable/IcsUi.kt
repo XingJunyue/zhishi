@@ -43,7 +43,7 @@ fun IcsLinkSheet(onGo: (String) -> Unit, onClose: () -> Unit) {
     val clip = LocalClipboardManager.current
     var url by remember { mutableStateOf(lastIcsUrl(c).ifEmpty { clip.getText()?.text?.trim()?.takeIf { Regex("^(https?|webcals?)://", RegexOption.IGNORE_CASE).containsMatchIn(it) && it.length < 600 } ?: "" }) }
     var help by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Card) {
+    GlassSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
             Text(tr("日历订阅链接"), fontSize = 21.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink)
             Text(tr("学校的课表或学习平台（Canvas、Moodle 等）里复制「日历订阅 / iCal」链接，贴在这里。只读取，不会改你的日历。"),

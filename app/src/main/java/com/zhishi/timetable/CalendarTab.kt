@@ -56,13 +56,12 @@ fun CalendarScreen(onOpenTodo: (Todo) -> Unit = {}) {
             }
             RoundBtn("‹") { month = month.minusMonths(1) }
             if (month != YearMonth.from(LocalDate.ofEpochDay(today)) || sel != today) Text(tr("今天"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 4.dp).clip(RoundedCornerShape(14.dp)).background(C.Glass).clickable {
+                modifier = Modifier.padding(horizontal = 4.dp).liquidGlass(RoundedCornerShape(14.dp), shadow = 3.dp).clickable {
                     month = YearMonth.from(LocalDate.ofEpochDay(today)); sel = today }.padding(horizontal = 12.dp, vertical = 8.dp))
             RoundBtn("›") { month = month.plusMonths(1) }
         }
         // 月历卡片
-        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth().clip(RoundedCornerShape(24.dp)).background(C.Glass)
-            .border(1.dp, C.GlassEdge, RoundedCornerShape(24.dp)).padding(horizontal = 8.dp, vertical = 12.dp)) {
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp).fillMaxWidth().liquidGlass(RoundedCornerShape(24.dp)).padding(horizontal = 8.dp, vertical = 12.dp)) {
             Row(Modifier.fillMaxWidth()) {
                 for (d in 1..7) Text(dayShort(d), fontSize = 13.sp, color = if (d >= 6) C.Faint else C.Soft, textAlign = TextAlign.Center, modifier = Modifier.weight(1f))
             }
@@ -99,11 +98,11 @@ fun CalendarScreen(onOpenTodo: (Todo) -> Unit = {}) {
         val cls = remember(sel, courses) { Term.classesOn(courses, term, total, sel) }
         val tds = remember(sel, todos) { Todos.on(todos, sel) }
         if (cls.isEmpty() && tds.isEmpty()) Text(tr("这天没有课，也没有待办"), fontSize = 13.sp, color = C.Soft,
-            modifier = Modifier.padding(horizontal = 14.dp).fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Glass).padding(16.dp))
+            modifier = Modifier.padding(horizontal = 14.dp).fillMaxWidth().liquidGlass(RoundedCornerShape(18.dp), shadow = 3.dp).padding(16.dp))
         Column(Modifier.padding(horizontal = 14.dp)) {
             for (s in cls) {
                 val (bg, fg) = courseTone(colorOf(s, pal), C.dark, C.Card)
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).clip(RoundedCornerShape(18.dp)).background(C.Glass).border(1.dp, C.GlassEdge, RoundedCornerShape(18.dp))
+                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp).liquidGlass(RoundedCornerShape(18.dp))
                     .padding(horizontal = 14.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.width(52.dp)) {
                         Text(Term.clock(s.from), fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold)
@@ -127,7 +126,7 @@ fun CalendarScreen(onOpenTodo: (Todo) -> Unit = {}) {
 
 @Composable
 private fun RoundBtn(t: String, onClick: () -> Unit) {
-    Box(Modifier.padding(start = 6.dp).size(38.dp).clip(CircleShape).background(C.Glass).border(1.dp, C.GlassEdge, CircleShape).clickable { onClick() },
+    Box(Modifier.padding(start = 6.dp).size(38.dp).liquidGlass(CircleShape).clickable { onClick() },
         contentAlignment = Alignment.Center) { Text(t, fontSize = 22.sp, color = C.Ink, lineHeight = 22.sp) }
 }
 

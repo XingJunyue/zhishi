@@ -121,12 +121,12 @@ object C {
     val Sage get() = Color(pal.sage)
     val SagePale get() = Color(pal.sagePale)
     val SageInk get() = Color(pal.sageInk)
-    /** 毛玻璃卡片底：盖在插画背景上，浅色偏白、深色偏暗，都留一点透明。 */
-    val Glass get() = Color(pal.card).copy(alpha = if (dark) 0.62f else 0.74f)
-    /** 底部导航条、弹出的卡片：比 Glass 更实一些。 */
-    val GlassStrong get() = Color(pal.card).copy(alpha = if (dark) 0.86f else 0.9f)
-    /** 毛玻璃卡片的细边。 */
-    val GlassEdge get() = (if (dark) Color.White else Color.White).copy(alpha = if (dark) 0.08f else 0.55f)
+    /** 液态玻璃的底（清透，插画背景透出来）；要亮边和水光用 Modifier.liquidGlass（Glass.kt）。 */
+    val Glass get() = com.zhishi.timetable.Glass.fill(com.zhishi.timetable.Glass.CLEAR)
+    /** 稍实一点的玻璃（导航条一档）。 */
+    val GlassStrong get() = com.zhishi.timetable.Glass.fill(com.zhishi.timetable.Glass.BAR)
+    /** 玻璃的细亮边。 */
+    val GlassEdge get() = Color.White.copy(alpha = if (dark) 0.16f else 0.6f)
 }
 
 /** 课块配色（浅底, 深字）：深色模式下换成深底浅字，色相不变。 */

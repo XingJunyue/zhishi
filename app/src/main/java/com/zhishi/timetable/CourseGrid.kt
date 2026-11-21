@@ -287,7 +287,7 @@ fun TimetableScreen() {
                         else -> tr("回到本周")
                     }
                     if (tag != null) Text(tag, fontSize = 11.sp, color = C.ClayDeep, maxLines = 1, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 10.dp).clip(RoundedCornerShape(10.dp)).background(C.Glass)
+                        modifier = Modifier.padding(start = 10.dp).liquidGlass(RoundedCornerShape(10.dp), shadow = 3.dp)
                             .clickable(enabled = nowWeek != null && shownWeek != nowWeek) { scope.launch { pager.animateScrollToPage(((nowWeek ?: 1) - 1).coerceIn(0, pages - 1)) } }
                             .padding(horizontal = 8.dp, vertical = 3.dp))
                 }
@@ -377,7 +377,7 @@ fun TimetableScreen() {
         }
     }, onClose = { pickCal = null }) }
     backup?.let { b ->
-        AlertDialog(onDismissRequest = { backup = null }, containerColor = C.Card,
+        AlertDialog(onDismissRequest = { backup = null }, containerColor = androidx.compose.ui.graphics.Color.Transparent, tonalElevation = 0.dp, shape = DialogShape, modifier = dialogGlass(),
             title = { Text(tr("从备份恢复课表？"), color = C.Ink) },
             text = { Text(if (b.todos == null) tr("备份里有 {0} 节课。会替换现在的课表、每节课时间和开学日期。", b.courses.size)
                 else tr("备份里有 {0} 节课、{1} 条待办。会替换现在的课表、待办、每节课时间和开学日期。", b.courses.size, b.todos.size), color = C.Soft, lineHeight = 20.sp) },
@@ -405,7 +405,7 @@ fun decodeText(b: ByteArray): String {
 
 @Composable
 private fun TopIcon(onClick: () -> Unit, content: @Composable () -> Unit) {
-    Box(Modifier.padding(start = 8.dp).size(42.dp).clip(CircleShape).background(C.Glass).border(1.dp, C.GlassEdge, CircleShape).clickable { onClick() }, contentAlignment = Alignment.Center) { content() }
+    Box(Modifier.padding(start = 8.dp).size(42.dp).liquidGlass(CircleShape).clickable { onClick() }, contentAlignment = Alignment.Center) { content() }
 }
 
 /** 日历图标（右上角：学期与显示）。 */
@@ -427,7 +427,7 @@ private fun CalGlyph(col: Color) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun ImportSheet(onClose: () -> Unit, onAdd: () -> Unit, onPick: (String) -> Unit) {
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Card) {
+    GlassSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
             Text(tr("添加与导入"), fontSize = 21.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(start = 8.dp, bottom = 8.dp))
             SheetRow("＋", tr("添加课程"), tr("手动填一节课")) { onAdd() }
@@ -474,7 +474,7 @@ private fun NowStrip(courses: List<Slot>, week: Int?, pal: Map<String, Pair<Colo
     val n = CourseWidgets.plan(todays, m)
     val s = n.main
     Row(
-        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).clip(RoundedCornerShape(18.dp)).background(C.Glass).border(1.dp, C.GlassEdge, RoundedCornerShape(18.dp))
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).liquidGlass(RoundedCornerShape(18.dp))
             .then(if (s != null) Modifier.clickable { onOpen(s, d) } else Modifier).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
@@ -600,7 +600,7 @@ private fun WeekGrid(
 /** 还没有课时：一场细雨落在新芽上，下面两个大按钮。 */
 @Composable
 private fun EmptyTable(m: Modifier, onImport: () -> Unit, onNew: () -> Unit) {
-    Column(m.padding(horizontal = 28.dp).fillMaxWidth().clip(RoundedCornerShape(28.dp)).background(C.GlassStrong).border(1.dp, C.GlassEdge, RoundedCornerShape(28.dp)).padding(22.dp),
+    Column(m.padding(horizontal = 28.dp).fillMaxWidth().liquidGlass(RoundedCornerShape(28.dp), Glass.BAR).padding(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
         RainArt(size = 130.dp)
         Text(tr("还没有课"), fontSize = 20.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 6.dp))
@@ -637,11 +637,11 @@ private fun CourseBlock(k: Block, col0: Pair<Color, Color>, live: Boolean, m: Mo
     val appear = remember { Animatable(0f) }
     LaunchedEffect(Unit) { appear.animateTo(1f, tween(320, easing = FastOutSlowInEasing)) }
     val shape = RoundedCornerShape(14.dp)
-    // 半透明的柔和色块（像磨砂玻璃），没有粗边框和重阴影；正在上的课加一圈细细的同色描边
+    // 正在上的课加一圈细细的同色描边
     Box(m.graphicsLayer { alpha = appear.value; translationY = (1f - appear.value) * 12f }
-        .clip(shape)
-        .background(if (k.on) bg.copy(alpha = if (C.dark) 0.78f else 0.84f) else C.Glass.copy(alpha = 0.5f))
-        .then(if (live) Modifier.border(1.5.dp, fg.copy(alpha = 0.6f), shape) else if (!k.on) Modifier.border(1.dp, C.GlassEdge, shape) else Modifier)
+        // 液态玻璃课块：保留课程颜色，但半透（插画透出来），加亮边和顶部水光
+        .liquidGlass(shape, tint = fg, fill = if (k.on) bg.copy(alpha = if (C.dark) 0.64f else 0.68f) else Glass.fill(Glass.CLEAR), shadow = if (k.on) 3.dp else 0.dp)
+        .then(if (live) Modifier.border(1.5.dp, fg.copy(alpha = 0.6f), shape) else Modifier)
         .clickable { onClick() }) {
         val tc = if (k.on) fg else C.Faint
         val showLvl = Term.showLevel(c0)
@@ -723,7 +723,7 @@ fun CourseSheet(start: Slot, isNew: Boolean = start.name.isEmpty(), onSave: (Slo
     val starts = remember { Term.secStarts(c) }
     val ends = remember { Term.secEnds(c) }
     var askDel by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Card) {
+    GlassSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 22.dp).padding(bottom = 20.dp).navigationBarsPadding().imePadding().verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(if (isNew) tr("添加课程") else tr("编辑课程"), fontSize = 21.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
@@ -816,8 +816,8 @@ fun TermDateDialog(title: String, sub: String, initial: Long, onPick: (Long) -> 
     val loc = remember(conf) { android.content.res.Configuration(conf).apply { setLocale(Tr.locale()) } }
     CompositionLocalProvider(LocalConfiguration provides loc) {
         val st = rememberDatePickerState(initialSelectedDateMillis = initial * 86_400_000L)
-        DatePickerDialog(onDismissRequest = onClose,
-            colors = DatePickerDefaults.colors(containerColor = C.Card),
+        DatePickerDialog(onDismissRequest = onClose, shape = DialogShape, tonalElevation = 0.dp, modifier = dialogGlass(),
+            colors = DatePickerDefaults.colors(containerColor = Color.Transparent),
             confirmButton = { TextButton({ st.selectedDateMillis?.let { onPick(Math.floorDiv(it, 86_400_000L)) } ?: onClose() }) { Text(tr("确定"), color = C.ClayDeep, fontWeight = FontWeight.SemiBold) } },
             dismissButton = { TextButton(onClose) { Text(tr("取消"), color = C.Soft) } }) {
             // 对话框是单独的窗口，会重新提供 LocalConfiguration，所以在里面再按界面语言覆盖一次
@@ -827,7 +827,7 @@ fun TermDateDialog(title: String, sub: String, initial: Long, onPick: (Long) -> 
                     Text(title, fontSize = 14.sp, color = C.Soft)
                     Text(sub, fontSize = 11.sp, color = C.Faint, lineHeight = 15.sp)
                 }
-            }, colors = DatePickerDefaults.colors(containerColor = C.Card, selectedDayContainerColor = C.Clay, todayDateBorderColor = C.Clay, todayContentColor = C.ClayDeep,
+            }, colors = DatePickerDefaults.colors(containerColor = Color.Transparent, selectedDayContainerColor = C.Clay, todayDateBorderColor = C.Clay, todayContentColor = C.ClayDeep,
                 selectedYearContainerColor = C.Clay))
             }
         }
@@ -849,7 +849,7 @@ fun TermSheet(openPicker: Boolean = false, onChange: () -> Unit, onClose: () -> 
     var pick by remember { mutableStateOf(openPicker) }
     LaunchedEffect(openPicker) { if (openPicker) pick = true }
     fun reload() { term = Term.termStart(c); week = Term.weekNow(c); onChange() }
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Card) {
+    GlassSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 22.dp).padding(bottom = 24.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
             Text(tr("学期与显示"), fontSize = 21.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink)
             Row(Modifier.padding(top = 16.dp).fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(C.Sand).clickable { pick = true }.padding(horizontal = 14.dp, vertical = 14.dp),
@@ -889,7 +889,7 @@ fun TermSheet(openPicker: Boolean = false, onChange: () -> Unit, onClose: () -> 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SecTimesSheet(onChange: () -> Unit, onClose: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Cream) {
+    GlassSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 18.dp).padding(bottom = 20.dp).navigationBarsPadding().verticalScroll(rememberScrollState())) {
             Text(tr("每节课时间"), fontSize = 21.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(start = 4.dp, bottom = 10.dp))
             SecTimesCard(onChange)
@@ -949,7 +949,7 @@ fun ImportPreview(found: List<JwCourse>, onSave: (Boolean) -> Unit, onClose: () 
     val c = LocalContext.current
     var replace by remember { mutableStateOf(1) }
     val had = remember { Term.desired(c).count { it.kind == "course" } }
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true), containerColor = C.Card) {
+    GlassSheet(onDismissRequest = onClose, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
         Column(Modifier.padding(horizontal = 22.dp).padding(bottom = 20.dp).navigationBarsPadding()) {
             Text(tr("识别到 {0} 节课", found.size), fontSize = 21.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink)
             Text(tr("{0} 门课程。核对一下，导入后还能在课表里点开修改。", found.map { it.name }.distinct().size), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 4.dp, bottom = 8.dp))

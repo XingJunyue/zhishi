@@ -38,6 +38,14 @@ object Nav {
     val open = mutableStateOf<String?>(null)
     val subState = mutableStateOf(0)
     var sub: Int get() = subState.value; set(v) { subState.value = v }
+    /** 有整屏流程打开着（教务导入等）：底部导航条收起来，免得盖住页面底部的按钮。 */
+    val fullScreen = mutableStateOf(0)
+}
+
+/** 整屏流程用：显示期间把底部导航条藏起来。 */
+@Composable
+fun HideBottomBar() {
+    DisposableEffect(Unit) { Nav.fullScreen.value++; onDispose { Nav.fullScreen.value = (Nav.fullScreen.value - 1).coerceAtLeast(0) } }
 }
 
 class MainActivity : ComponentActivity() {
@@ -117,11 +125,14 @@ fun App() {
                 }
             }
         }
-        if (!sub) BottomBar(screen, Modifier.align(Alignment.BottomCenter)) { screen = it }
+        AnimatedVisibility(!sub && Nav.fullScreen.value == 0, Modifier.align(Alignment.BottomCenter),
+            enter = fadeIn(tween(180)) + slideInVertically { it / 2 }, exit = fadeOut(tween(120)) + slideOutVertically { it / 2 }) {
+            BottomBar(screen, Modifier) { screen = it }
+        }
     }
 }
 
-/** 底部毛玻璃导航条：课表 / 待办 / 日历 / 我的，选中的那个用皮肤主色的实心图标。 */
+/** 底部液态玻璃导航条：课表 / 待办 / 日历 / 我的，选中的那个用皮肤主色的实心图标，下面垫一颗玻璃胶囊。 */
 @Composable
 private fun BottomBar(cur: String, m: Modifier, go: (String) -> Unit) {
     val items = listOf(
@@ -130,16 +141,17 @@ private fun BottomBar(cur: String, m: Modifier, go: (String) -> Unit) {
         Triple("calendar", tr("日历"), Icons.Filled.DateRange to Icons.Outlined.DateRange),
         Triple("me", tr("我的"), Icons.Filled.AccountCircle to Icons.Outlined.AccountCircle),
     )
-    val shape = RoundedCornerShape(28.dp)
+    val shape = CircleShape
     Row(
-        m.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth().clip(shape)
-            .background(C.GlassStrong).border(1.dp, C.GlassEdge, shape).padding(vertical = 6.dp),
+        m.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth()
+            .liquidGlass(shape, Glass.BAR, shadow = 10.dp).padding(horizontal = 6.dp, vertical = 6.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         for ((id, label, icons) in items) {
             val on = id == cur
             val tint by animateColorAsState(if (on) C.ClayDeep else C.Faint, label = "tab")
-            Column(Modifier.weight(1f).clip(RoundedCornerShape(20.dp)).clickable { go(id) }.padding(vertical = 6.dp),
+            val pill by animateColorAsState(if (on) Color.White.copy(alpha = if (C.dark) 0.12f else 0.42f) else Color.Transparent, label = "pill")
+            Column(Modifier.weight(1f).clip(CircleShape).background(pill).clickable { go(id) }.padding(vertical = 6.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
                 Icon(if (on) icons.first else icons.second, null, tint = tint, modifier = Modifier.size(24.dp))
                 Text(label, fontSize = 11.sp, color = tint, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1,

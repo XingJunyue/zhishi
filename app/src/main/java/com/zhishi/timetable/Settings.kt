@@ -124,8 +124,8 @@ private fun RowLink(t: String, sub: String?, onClick: () -> Unit) {
 @Composable
 private fun LangChip(t: String, on: Boolean, onClick: () -> Unit) {
     Text(t, fontSize = 14.sp, color = if (on) C.OnClay else C.Ink,
-        modifier = Modifier.padding(4.dp).clip(RoundedCornerShape(14.dp))
-            .background(if (on) C.Clay else C.Sand).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp))
+        modifier = Modifier.padding(4.dp)
+            .liquidGlass(CircleShape, tint = C.Clay, fill = if (on) C.Clay.copy(alpha = 0.86f) else null, shadow = 0.dp).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp))
 }
 
 /** 皮肤选择：每套一个圆形的插画缩略图（深浅色跟当前模式），下面是名字；选中的套一圈主色。下面一行是这套皮肤的一句话。 */
@@ -185,9 +185,11 @@ private fun WidgetCard(title: String, wide: Boolean, canPin: Boolean, onPin: () 
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
             if (canPin) Text(tr("添加到桌面"), fontSize = 13.sp, color = C.OnClay, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.clip(RoundedCornerShape(14.dp)).background(C.Clay).clickable { onPin() }.padding(horizontal = 14.dp, vertical = 8.dp))
+                style = androidx.compose.material3.LocalTextStyle.current.copy(shadow = null),
+                modifier = Modifier.liquidGlass(CircleShape, tint = C.Clay, fill = C.Clay.copy(alpha = 0.86f), shadow = 0.dp).clickable { onPin() }.padding(horizontal = 14.dp, vertical = 8.dp))
         }
-        Box(Modifier.fillMaxWidth().padding(top = 14.dp).clip(RoundedCornerShape(20.dp)).background(C.Sand.copy(alpha = 0.6f)).padding(14.dp), contentAlignment = Alignment.Center) {
+        // 小部件本身是透明的玻璃：直接放在插画背景上预览，和放在桌面壁纸上一样
+        Box(Modifier.fillMaxWidth().padding(top = 14.dp).padding(4.dp), contentAlignment = Alignment.Center) {
             if (bmp != null) Image(bmp, null, contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth(if (wide) 1f else 0.5f).aspectRatio(if (wide) 320f / 156f else 1f))
         }

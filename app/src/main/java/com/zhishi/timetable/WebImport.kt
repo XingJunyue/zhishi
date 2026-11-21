@@ -83,6 +83,8 @@ fun JwImportScreen(onClose: () -> Unit, onParsed: (List<JwCourse>) -> Unit) {
     // kind：neu / zf / qz …；null = 还在选
     var kind by remember { mutableStateOf(TimetableTest.webKind) }
     var url by remember { mutableStateOf(TimetableTest.webUrl ?: "") }
+    // 整屏流程：底部导航条收起来，否则会盖住底部的「导入课表」
+    HideBottomBar()
     val k0 = kind
     if (k0 == null) {
         JwPicker(onClose) { k, u -> kind = k; url = u }
@@ -120,12 +122,12 @@ private fun JwPicker(onClose: () -> Unit, onPick0: (String, String) -> Unit) {
     LaunchedEffect(Unit) { try { focus.requestFocus() } catch (x: Exception) {} }
     // 选了就记下来，下次打开放在「上次用的」；手动选类型时名字留空
     val onPick: (String, String, String) -> Unit = { name, k, u -> rememberJw(c, name, k, u); onPick0(k, u) }
-    Column(Modifier.fillMaxSize().background(C.Cream)) {
+    Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("‹", fontSize = 28.sp, color = C.Ink, modifier = Modifier.clip(CircleShape).clickable { onClose() }.padding(horizontal = 14.dp))
             Text(tr("从教务导入"), fontSize = 22.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink, letterSpacing = 0.5.sp)
         }
-        Box(Modifier.padding(horizontal = 18.dp).fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(C.Card).padding(horizontal = 16.dp, vertical = 13.dp)) {
+        Box(Modifier.padding(horizontal = 18.dp).fillMaxWidth().liquidGlass(CircleShape, shadow = 4.dp).padding(horizontal = 18.dp, vertical = 13.dp)) {
             if (q.isEmpty()) Text(tr("搜索学校或教务类型"), fontSize = 14.sp, color = C.Faint)
             BasicTextField(q, { q = it }, singleLine = true, textStyle = TextStyle(fontSize = 14.sp, color = C.Ink), modifier = Modifier.fillMaxWidth().focusRequester(focus))
         }
@@ -136,7 +138,7 @@ private fun JwPicker(onClose: () -> Unit, onPick0: (String, String) -> Unit) {
             if (t.isEmpty() && last != null) {
                 val kn = if (last.kind == "neu") tr("金智新教务 · jwxt.neu.edu.cn · 统一身份认证登录") else (Jw.KINDS.firstOrNull { it.id == last.kind }?.name?.let { tr(it) } ?: last.kind)
                 Text(tr("上次用的"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp, start = 4.dp))
-                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Card).clickable { onPick(last.name, last.kind, last.url) }.padding(horizontal = 16.dp, vertical = 12.dp),
+                Row(Modifier.fillMaxWidth().liquidGlass(RoundedCornerShape(22.dp)).clickable { onPick(last.name, last.kind, last.url) }.padding(horizontal = 16.dp, vertical = 12.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(last.name.ifEmpty { android.net.Uri.parse(last.url).host ?: last.url }.let { if (it == "东北大学") tr(it) else it }, fontSize = 15.sp, color = C.Ink, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -148,7 +150,7 @@ private fun JwPicker(onClose: () -> Unit, onPick0: (String, String) -> Unit) {
             // 东北大学（金智）只在搜到时出现，不默认放在最上面
             if (neuHit(t)) {
                 Text(tr("学校"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.padding(top = 18.dp, bottom = 6.dp, start = 4.dp))
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Card).padding(16.dp)) {
+                Column(Modifier.fillMaxWidth().liquidGlass(RoundedCornerShape(22.dp)).padding(16.dp)) {
                     Text(tr("东北大学"), fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = C.Ink)
                     Text(tr("金智新教务 · jwxt.neu.edu.cn · 统一身份认证登录"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 2.dp))
                     Row(Modifier.padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -163,7 +165,7 @@ private fun JwPicker(onClose: () -> Unit, onPick0: (String, String) -> Unit) {
                 Text(tr("搜到的学校"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.padding(top = 18.dp, bottom = 2.dp, start = 4.dp))
                 Text(tr("学校列表来自开源项目，网址和类型不一定准；进去后可以改网址、点上方类型名换解析方式。"), fontSize = 11.sp, color = C.Faint, lineHeight = 16.sp,
                     modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Card)) {
+                Column(Modifier.fillMaxWidth().liquidGlass(RoundedCornerShape(22.dp))) {
                     found.forEachIndexed { i, sc ->
                         if (i > 0) Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(C.Track.copy(alpha = 0.7f)))
                         val kk = Schools.kindOf(sc)
@@ -189,7 +191,7 @@ private fun JwPicker(onClose: () -> Unit, onPick0: (String, String) -> Unit) {
                 Text(tr("通用教务类型"), fontSize = 13.sp, color = C.Faint, modifier = Modifier.padding(top = 18.dp, bottom = 2.dp, start = 4.dp))
                 Text(tr("学校不在上面？选你们教务系统的类型，再输入教务网址。登录页底部或网址里一般能看出是哪家。"), fontSize = 11.sp, color = C.Faint, lineHeight = 16.sp,
                     modifier = Modifier.padding(bottom = 6.dp, start = 4.dp))
-                Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(18.dp)).background(C.Card)) {
+                Column(Modifier.fillMaxWidth().liquidGlass(RoundedCornerShape(22.dp))) {
                     kinds.forEachIndexed { i, k ->
                         if (i > 0) Box(Modifier.padding(horizontal = 16.dp).fillMaxWidth().height(1.dp).background(C.Track.copy(alpha = 0.7f)))
                         Row(Modifier.fillMaxWidth().clickable { onPick("", k.id, prefs(c).getString("url_" + k.id, "") ?: "") }.padding(horizontal = 16.dp, vertical = 13.dp),
@@ -297,10 +299,10 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
     val onResult = rememberUpdatedState(handle)
     BackHandler { val w = wv; if (w != null && w.canGoBack()) w.goBack() else onBack() }
 
-    Column(Modifier.fillMaxSize().background(C.Cream)) {
+    Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 4.dp, end = 10.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("‹", fontSize = 28.sp, color = C.Ink, modifier = Modifier.clip(CircleShape).clickable { onBack() }.padding(horizontal = 14.dp))
-            Box(Modifier.weight(1f).clip(RoundedCornerShape(14.dp)).background(C.Card).padding(horizontal = 12.dp, vertical = 10.dp)) {
+            Box(Modifier.weight(1f).liquidGlass(CircleShape, shadow = 0.dp).padding(horizontal = 14.dp, vertical = 10.dp)) {
                 if (addr.isEmpty()) Text(tr("输入你们学校的教务网址"), fontSize = 13.sp, color = C.Faint, maxLines = 1)
                 BasicTextField(addr, { addr = it }, singleLine = true, textStyle = TextStyle(fontSize = 13.sp, color = C.Ink),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri, imeAction = ImeAction.Go),
@@ -354,7 +356,7 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
             // 底部：提示 + 导入按钮
             Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().padding(14.dp).navigationBarsPadding()) {
                 err?.let { e ->
-                    Column(Modifier.fillMaxWidth().shadow(4.dp, RoundedCornerShape(14.dp)).clip(RoundedCornerShape(14.dp)).background(C.Card).padding(12.dp)) {
+                    Column(Modifier.fillMaxWidth().liquidGlass(RoundedCornerShape(20.dp), Glass.THICK, shadow = 6.dp).padding(14.dp)) {
                         Text(e.msg, fontSize = 12.sp, color = C.ClayDeep, lineHeight = 17.sp)
                         Row(Modifier.padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(tr("重试"), fontSize = 12.sp, color = C.OnClay, fontWeight = FontWeight.SemiBold,
@@ -371,19 +373,20 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
                     }
                     Spacer(Modifier.height(8.dp))
                 }
-                Row(Modifier.fillMaxWidth().shadow(8.dp, RoundedCornerShape(20.dp)).clip(RoundedCornerShape(20.dp)).background(C.Card).padding(start = 14.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
+                Row(Modifier.fillMaxWidth().liquidGlass(CircleShape, Glass.THICK, shadow = 10.dp).padding(start = 18.dp, end = 6.dp, top = 6.dp, bottom = 6.dp),
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(if (busy) (if (pending) tr("页面还在加载，加载完自动导入…") else tr("正在{0}…", tr(JwOutcome.stepLabel(stepNow)))) else if (kind in setOf("generic", "cf", "nr", "umooc")) tr("登录后打开课表页面，再点导入") else tr("登录后直接点导入，不用打开课表页面"), fontSize = 12.sp, color = C.Soft, lineHeight = 16.sp, modifier = Modifier.weight(1f),
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Box(Modifier.clip(RoundedCornerShape(16.dp)).background(if (busy) C.Track else C.Clay).clickable(enabled = !busy) { grab(null) }.padding(horizontal = 18.dp, vertical = 12.dp)) {
+                    Box(Modifier.liquidGlass(CircleShape, tint = C.Clay, fill = if (busy) C.Track.copy(alpha = 0.7f) else C.Clay.copy(alpha = 0.9f), shadow = 0.dp)
+                        .clickable(enabled = !busy) { grab(null) }.padding(horizontal = 20.dp, vertical = 12.dp)) {
                         if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = C.Clay, strokeWidth = 2.dp)
-                        else Text(tr("导入课表"), fontSize = 15.sp, color = C.OnClay, fontWeight = FontWeight.Bold)
+                        else Text(tr("导入课表"), fontSize = 15.sp, color = C.OnClay, fontWeight = FontWeight.Bold, style = LocalTextStyle.current.copy(shadow = null))
                     }
                 }
             }
         }
     }
-    if (pickKind) AlertDialog(onDismissRequest = { pickKind = false }, containerColor = C.Card,
+    if (pickKind) AlertDialog(onDismissRequest = { pickKind = false }, containerColor = Color.Transparent, tonalElevation = 0.dp, shape = DialogShape, modifier = dialogGlass(),
         title = { Text(tr("换教务类型"), color = C.Ink) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
@@ -395,7 +398,7 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
         },
         confirmButton = {}, dismissButton = { TextButton({ pickKind = false }) { Text(tr("取消"), color = C.Soft) } })
     campuses?.let { cs ->
-        AlertDialog(onDismissRequest = { campuses = null }, containerColor = C.Card,
+        AlertDialog(onDismissRequest = { campuses = null }, containerColor = Color.Transparent, tonalElevation = 0.dp, shape = DialogShape, modifier = dialogGlass(),
             title = { Text(tr("选择校区"), color = C.Ink) },
             text = {
                 Column {

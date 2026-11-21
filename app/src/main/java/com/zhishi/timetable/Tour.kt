@@ -50,6 +50,10 @@ object Tour {
 
     /** 新版本在最前面加。id 一旦发出去就不要改（用来记「看过没有」）。 */
     val WHATS_NEW = listOf(
+        Release("glass", listOf(
+            TourPage("玻", "液态玻璃界面与小部件", "卡片、底部导航、按钮和弹窗都换成了清透的液态玻璃：不模糊，皮肤插画清清楚楚透出来，边上一圈水光。桌面小部件也是透明玻璃，跟着皮肤染色。", "settings"),
+            TourPage("导", "修复导入页按钮被导航栏遮挡", "从教务导入时，底部的提示和「导入课表」按钮不会再被导航栏挡住：导入页打开时导航栏自动收起。", "table:1"),
+        )),
         Release("redesign", listOf(
             TourPage("新", "全新的样子", "六套皮肤都换成了整屏插画，浅色深色各一张；课表、底部导航和应用图标也都重新设计了。在「我的」里换皮肤。", "settings"),
             TourPage("办", "新增待办", "底部「待办」记作业、考试和要交的东西：可以设截止时间、关联某门课、到点提醒。会一起放进课表备份。", "todo"),
@@ -135,9 +139,9 @@ fun TourHost() {
         var i by remember(w) { mutableStateOf(0) }
         BackHandler { if (i > 0) i-- else Tour.done(c, w) }
         Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable(enabled = true, onClick = {}), contentAlignment = Alignment.Center) {
-            Column(Modifier.padding(22.dp).widthIn(max = 420.dp).fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(C.Card)) {
+            Column(Modifier.padding(22.dp).widthIn(max = 420.dp).fillMaxWidth().liquidGlass(RoundedCornerShape(32.dp), Glass.THICK, shadow = 18.dp)) {
                 // 顶部的雨色渐变，放大号的字
-                Box(Modifier.fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(C.ClayPale, C.Card)))) {
+                Box(Modifier.fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(C.ClayPale.copy(alpha = 0.7f), Color.Transparent)))) {
                     Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 10.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(if (w == "new") tr("这个版本的新功能") else tr("新手教程"), fontSize = 12.sp, color = C.Soft, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
                         Text(tr("跳过"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { Tour.done(c, w) }.padding(horizontal = 12.dp, vertical = 8.dp))
@@ -178,7 +182,8 @@ fun TourHost() {
                     if (i > 0) Text(tr("上一步"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { i-- }.padding(horizontal = 12.dp, vertical = 10.dp))
                     val last = i == pages.size - 1
                     Text(if (last) tr("开始使用") else tr("下一步"), fontSize = 14.sp, color = C.OnClay, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
-                        modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(C.Clay).clickable { if (last) Tour.done(c, w) else i++ }.padding(horizontal = 20.dp, vertical = 11.dp))
+                        style = androidx.compose.material3.LocalTextStyle.current.copy(shadow = null),
+                        modifier = Modifier.liquidGlass(CircleShape, tint = C.Clay, fill = C.Clay.copy(alpha = 0.88f), shadow = 0.dp).clickable { if (last) Tour.done(c, w) else i++ }.padding(horizontal = 20.dp, vertical = 11.dp))
                 }
             }
         }
