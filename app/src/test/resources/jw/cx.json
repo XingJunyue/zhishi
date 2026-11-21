@@ -1,0 +1,8 @@
+{"ret":0,"msg":"success","data":[
+ {"kcmc":"<a href=\"javascript:void(0)\" onclick=\"kc('A1')\">高级语言程序设计</a>","tmc":"<a href=\"#\">林森（讲师）</a>","croommc":"实训楼502","xingqi":"1","djc":"1","zcstr":"1,2,3,4,5,6,7,8"},
+ {"kcmc":"<a href=\"#\">高级语言程序设计</a>","tmc":"林森（讲师）","croommc":"实训楼502","xingqi":"1","djc":"2","zcstr":"1,2,3,4,5,6,7,8"},
+ {"kcmc":"高级语言程序设计","tmc":"林森（讲师）","croommc":"实训楼502","xingqi":"1","djc":"3","zcstr":"1,2,3,4,5,6,7,8"},
+ {"kcmc":"高级语言程序设计","tmc":"林森","croommc":"实训楼502","xingqi":"1","djc":"4","zcstr":"9,10"},
+ {"kcmc":"大学语文","tmc":"苏文,白雪","croommc":"","xingqi":"4","djc":"5","zcstr":"2,4,6,8,10,12"},
+ {"kcmc":"大学语文","tmc":"苏文,白雪","croommc":"","xingqi":"4","djc":"6","zcstr":"2,4,6,8,10,12"}
+]}

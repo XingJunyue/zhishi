@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">知时</string>
+    <string name="w_course4_name">知时 · 课表 4×2</string>
+    <string name="w_course2_name">知时 · 课表 2×2</string>
+    <string name="w_course">今天正在上和下一节的课</string>
+</resources>

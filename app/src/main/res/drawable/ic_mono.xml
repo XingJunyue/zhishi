@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 主题图标（单色）：一个圆环里三张叠着的卡片 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:strokeColor="#000000" android:strokeWidth="2.4" android:fillColor="#00000000"
+        android:pathData="M54,31 A23,23 0 1,1 53.99,31 Z"/>
+    <path android:fillColor="#000000" android:pathData="M39,38 L50,38 Q52,38 52,40 L52,42.5 L44,42.5 L44,56 L39,56 Q37,56 37,54 L37,40 Q37,38 39,38 Z"/>
+    <path android:fillColor="#000000" android:pathData="M47.5,44 L58.5,44 Q60.5,44 60.5,46 L60.5,48.5 L52.5,48.5 L52.5,62 L47.5,62 Q45.5,62 45.5,60 L45.5,46 Q45.5,44 47.5,44 Z"/>
+    <path android:fillColor="#000000" android:fillType="evenOdd"
+        android:pathData="M56.5,50 L66.5,50 Q69,50 69,52.5 L69,65.5 Q69,68 66.5,68 L56.5,68 Q54,68 54,65.5 L54,52.5 Q54,50 56.5,50 Z M57,56 L66,56 L66,58 L57,58 Z M57,61 L63,61 L63,63 L57,63 Z"/>
+</vector>

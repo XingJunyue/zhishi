@@ -1,0 +1,74 @@
+# AGENTS.md — 给接手知时的 agent
+
+知时（Zhishi）是刑君越的安卓课表 App，从作者的另一个应用「留白」（自律 / 应用守护）里把课表相关功能单独拿出来做成的独立应用。Kotlin + Jetpack Compose，包名 / applicationId `com.zhishi.timetable`，可以和留白同时安装。名字取自杜甫「好雨知时节」。动手前先读完这份。
+
+## 范围
+- 只做课表和学习相关：课表格子与编辑、教务导入、日历 / 文件 / 截图导入、学期与节次设置、**待办**、月历视图、课表小部件、皮肤、设置、关于与更新、教程。
+- 待办是用户明确要的（2026-11 改版时提出）：标题、备注、截止时间、关联课程（按课名）、完成、到点提醒；分组今天 / 即将 / 已完成，左右滑删除；存 SharedPreferences `todo` 的 `items`，课表备份 / 导出里带 `todos` 字段（旧备份没有就不动现有待办）。逻辑在 `Todo.kt`（`Todos` 纯函数有单测 `TodoTest`），界面在 `TodoUi.kt`。
+- 到点提醒：`TodoAlarm` 用 AlarmManager，有精确闹钟权限（`canScheduleExactAlarms`）才用精确的，否则不精确；通知权限 POST_NOTIFICATIONS 只在用户第一次打开某条待办的提醒时申请。`TodoReminder` 发通知，开机 / 更新后重排。
+- 不做任何应用守护 / 拦截 / 专注 / 使用时长统计；不要加无障碍、使用情况访问、悬浮窗、设备管理、查询全部应用、通知监听这类权限。（待办提醒用的 POST_NOTIFICATIONS、SCHEDULE_EXACT_ALARM、RECEIVE_BOOT_COMPLETED 是允许的。）
+
+## 界面结构（2026-11 改版，照用户给的六张皮肤参考图）
+- 底部毛玻璃导航四项：课表 / 待办 / 日历 / 我的（`MainActivity.App`、`BottomBar`）。没有侧栏了。「我的」= 原来的设置页（`MeScreen`，打开名 `settings` 或 `me`），小部件页、关于页从「我的」点进去，左上角返回。
+- 课表页顶部：大号粗体「第N周」+「周一 11.21」，右上角「＋」（添加课程和所有导入，底部弹出）和日历图标（学期与显示）。下面一周日期条，今天是柔和的圆角胶囊；左边时间列是每节的上 / 下课时间 + 细虚线时间轴；课块是半透明的柔和色块，没有粗边框和阴影。
+- 字体：全部系统无衬线（`Serif` 现在就是默认字体，名字保留免得到处改）。
+- 每套皮肤有整屏插画背景（浅 / 深各一张，`res/drawable-nodpi/skin_<id>_<light|dark>.webp`，插画在右上、右边和底部，中间留白）和圆形缩略图（`..._thumb.webp`）；`Backdrop` 铺在所有页面下面，卡片用 `C.Glass` 半透明。插画是 AI 生成后压成 WebP 的，要换就整套换，别直接截参考图（参考图里有手机边框和假界面）。
+- 应用图标：用户自己给的图（星空 / 樱花 / 远山水彩，中间金色圆环 + 三张叠着的彩色卡片）。自适应图标背景层 `ic_launcher_bg.webp` = 整张图（圆环在 66dp 安全区内），前景 `ic_launcher_fg.xml` 透明，单色层 `ic_mono.xml` 是圆环里三张卡片的剪影；旧版 mipmap PNG 取中间 70%。应用内（我的、关于、教程第一页）用 `AppIcon` 显示同一张。不要换成别的图。
+- 课程等级（重要 / 普通 / 水课）只是显示用的标签：课块、小部件上标出来，`Term.showLevel` / `Term.widgetLevel` 分别开关，不附带任何限制。
+
+## 发布流程
+- `main` = 正式版。推到 main 会触发 `.github/workflows/build.yml`：单元测试 → 构建 → 模拟器冒烟测试（`tools/smoke.sh` 截图，打包发到 `ci-shots` 预发布，也作为 artifact `shots` 上传）→ 发布 release `build-N`（资产 `zhishi-1.N.apk`），应用内更新器会推给用户。
+- 新功能一律开分支，用 workflow_dispatch 跑 CI，`preview` job 发 prerelease 预览包（tag `preview-<分支名去掉 -redo>-<run_number>`）给用户试。
+- **只有用户明确说"上线 / 直接上 / 测试通过"才合入 main。** 不要自行合并。
+- 预览包关闭应用内更新：非 main 分支给 gradle 传 `-Ppreview`（env `PV`），`BuildConfig.PREVIEW=true`；`Updater.enabled()` = `!PREVIEW`。构建后 grep `BuildConfig.java` 核对，单测 `TourAndUpdaterTest` 也测。
+- 更新器读 `Updater.REPO = "XingJunyue/zhishi"` 的 releases（tag `build-N`、资产 `zhishi-1.N.apk`），直连失败走镜像。仓库是私有的时候拿不到（界面会提示「仓库还没公开」）。
+- 只文档改动推 main 时提交信息加 `[skip ci]`，避免多发一个版本。
+- 签名：密钥不在仓库里。CI 从 Actions secrets `KS_B64`（p12 的 base64）和 `KS_PASS` 还原，别名 `zhishi`；本地构建设 env `KS_FILE`/`KS_PASS`。仓库是公开的，绝不能把 p12 或密码提交进来。换密钥会导致老用户无法覆盖安装。
+
+## 每个版本都要有应用内教程
+- 首次安装：可跳过的完整引导（`Tour.FIRST`）。
+- 每次更新：可跳过的「新功能」指引（`Tour.WHATS_NEW`，新版本在最前面加一条 `Release(id, pages)`，id 发出去后不要改）。按 versionCode 记录已看版本；新装只弹首次引导、把已有条目都记成看过。
+- 设置里「新手教程」「这个版本的新功能」可重看。新功能上线必须同时补指引条目。
+- 存储：SharedPreferences `tour`（`code`、`seen`、`firstPending`）。
+- 冒烟测试不被挡：`--ez seed true` / `--ez notour true` 把教程记成看过；`--es tour first|new` 直接弹出来截图。
+
+## 多语言
+- 界面文字用中文原文当键（`tr("…")`），六种语言在 `app/src/main/assets/i18n/{en,fr,ja,ko,de,es}.json`。
+- `TourAndUpdaterTest.allStringsTranslated` 会扫源码里所有 `tr("…")` 文案、教程、皮肤名，六种语言缺一条就失败。新文案必须同时补六种翻译。
+- 应用名在 `res/values*/strings.xml`：知时 / Zhishi（日语 知時）。
+
+## 皮肤
+- `Theme.kt`：`Skins.ALL` 六套（春雨 chunyu 默认、宣纸 xuanzhi、青瓷 qingci、暮山 mushan、夜航 yehang、樱 ying），每套 `light` / `dark` 两份 `Pal`，加插画背景 / 缩略图（`Skin.art` / `Skin.thumb`）。`poem` 是用户定的一句话简介：春雨「清新如春，细雨润心」、宣纸「书卷墨香，文心相伴」、青瓷「古韵流光，淡雅宁静」、暮山「暮色山河，静谧沉稳」、夜航「星海航行，向梦而行」、樱「樱花烂漫，与你相遇」。模式：跟随系统 / 浅色 / 深色。存储在 SharedPreferences `look`（`skin`、`mode`）。
+- 界面用 `C.*`（Compose 状态，换皮肤立即重组）；小部件用 `Skins.palFor(context)`（不依赖 Compose）。`Skins.setSkin/setMode` 会立刻重画所有小部件。
+- 课程颜色 `COURSE_COLORS`（浅底, 深字），深色模式经 `courseTone` 变成深底浅字，界面和小部件一致。
+- 新皮肤：在 `Skins.ALL` 加一条、在 `Skin.ART` 里登记插画和缩略图，名字和简介补六种翻译。
+
+## 小部件
+- `CourseWidget.kt`：4×2 / 2×2，整张画成位图。排版、内容和行为照搬留白；颜色取当前皮肤。
+- 刷新：没有后台服务，改用 `AlarmManager.set(RTC)`（不唤醒）排下一次：今天还有课就下一分钟，没课到明天 0 点；`WidgetTick` 接收闹钟和改时间 / 时区 / 更新安装广播。改课、改设置、换皮肤都会 `CourseWidgets.safeUpdate`。
+- 小部件页（「我的 → 桌面小部件」）显示和桌面同一套画法的实时预览（`CourseWidgets.preview`），支持一键添加（`requestPinAppWidget`）。
+- 小部件底色取皮肤配色，再淡淡铺一层当前皮肤插画的顶部（`faintArt`，按皮肤 + 深浅色取图），换皮肤立刻重画。
+
+## 用户的决定（不要推翻）
+- 课表节次时间由用户自己编辑，不内置东北大学作息预设；导入只在教务数据返回时间时才写时间。
+- 不做 WakeUp 分享口令导入；界面上也不要出现「WakeUp」字样（CSV 导入叫「Excel / CSV 导入」）。`TourAndUpdaterTest.noWakeUpWording` 会查。
+- 教务导入页不默认任何学校（包括东北大学）：打开时搜索框为空并聚焦，东大只在搜到时出现；用户选过一次后才在「上次用的」显示（SharedPreferences `jwimport` 的 `last_*`）。
+- 东大（金智）教务导入已在真实账号验证通过，改其他教务时不要动它的逻辑。
+- 新 UI 文案六种语言都要补。
+
+## 教务导入现状（从留白继承，逻辑未改）
+- 真实登录验证：仅东大金智。其他全部只有构造的样例页面 / JSON 单测（`JwTest`、`JwAdaptersTest`、`JwFetchTest`、`EamsFetchTest`，样例在 `app/src/test/resources/jw/`），没有真实账号测过。对外说明时如实讲，不夸大。
+- 解析在 `Jw.kt` 和 `JwAdapters.kt`，取数脚本在 `JwScript.kt` 的 `jwScript`，导入界面在 `WebImport.kt`，内置浏览器设置在 `JwWebView.kt`。JS 桥对象名 `ZhishiJw`（测试的 harness.js 同名）。
+- 所有教务类型都是「登录后直接点导入」：脚本按类型直接请求课表接口，请求不到再读当前页面和 iframe/frame。每个请求 20 秒超时、整次 90 秒看门狗、页面跳转中点导入会等加载完、过期结果丢掉。失败分「登录未完成 / 没找到课表 / 解析为空 / 请求失败 / 超时」，有「重试」和「复制诊断信息」。
+- 树维 eams：脚本自己 GET `courseTableForStd.action` 取 ids / 学期 id，再 POST `courseTableForStd!courseTable.action`；电子科大读不到学期 id 时按日期推（483 起每学期 +20）。冒烟测试用 `tools/fake_eams.py` 在模拟器上端到端跑。都是手写样例。
+- 已知问题：电子科大统一认证二次认证页在内置浏览器里可能空白（没有真实账号确认修好）；先让用户试「电脑版」。
+- 学校搜索：`assets/schools.tsv`，由 `tools/build_schools.py` 生成（来源 s = shiguang_warehouse，b = baoozak/timetable，m = 手动核对）。列表网址 / 类型都没验证过，界面上有提示。
+- 第三方参考只用 MIT / Apache-2.0 代码并保留署名（THIRD_PARTY_NOTICES.md 以及 `Jw.kt`/`JwAdapters.kt` 文件头）；不要复制 GPL 项目代码。
+- 开学日期不从教务读取，导入后让用户确认。
+
+## 冒烟测试钩子（只在 debug 版，`TestHooks.kt`）
+- `--ez seed true` 放示例课程（含一节「正在上」的课）和几条示例待办；`--es setlang zh|en|…` 换语言；`--es skin <id> --ei mode 0|1|2` 换皮肤；`--es open table:N|todo:N|calendar|settings:N|me|widget|about` 打开页面（`todo:1` 新建待办、`todo:2` 编辑第一条）（`table:1` 教务导入、`table:2` 学期、`table:3` 加课、`table:4` 改课、`table:5` 开学日期、`table:7` 每节时间、`table:8` 导入菜单）；`--es jwkind/jwurl --ez jwauto` 网页导入；`--es jwq` 预填学校搜索；`--es ocr <文件>` 识别截图。
+
+## 工作习惯
+- 声称完成前先让 CI 绿、看冒烟截图。
+- 没验证过的功能不说已完成。

@@ -1,0 +1,36 @@
+<html><head></head><body><table id="manualArrangeCourseTable"></table>
+<script language="JavaScript">
+var table0 = new CourseTable(2026,84);
+var unitCount = 12;
+var index=0;
+var activity=null;
+var teachers = [{id:4372,name:"王老师",lab:false}];
+var actTeacherId = [];
+var actTeacherName = [];
+for (var i = 0; i < teachers.length; i++) { actTeacherId.push(teachers[i].id); actTeacherName.push(teachers[i].name); }
+activity = new TaskActivity(actTeacherId.join(','),actTeacherName.join(','),"297318(E0100220.08)","大学物理Ⅱ(E0100220.08)","3020","清水河校区品学楼B-209","01111111111111111000000000000000000000000000000000000",null,null,assistantName,"","");
+index =0*unitCount+0;
+table0.activities[index][table0.activities[index].length]=activity;
+index =0*unitCount+1;
+table0.activities[index][table0.activities[index].length]=activity;
+var teachers = [{id:5110,name:"李老师",lab:false},{id:5111,name:"赵老师",lab:false}];
+var actTeacherId = [];
+var actTeacherName = [];
+for (var i = 0; i < teachers.length; i++) { actTeacherId.push(teachers[i].id); actTeacherName.push(teachers[i].name); }
+activity = new TaskActivity(actTeacherId.join(','),actTeacherName.join(','),"298001(I1100120.02)","程序设计基础(I1100120.02)","3022","清水河校区立人楼A-101","01010101010101010000000000000000000000000000000000000",null,null,assistantName,"","");
+index =2*unitCount+4;
+table0.activities[index][table0.activities[index].length]=activity;
+index =2*unitCount+5;
+table0.activities[index][table0.activities[index].length]=activity;
+index =2*unitCount+6;
+table0.activities[index][table0.activities[index].length]=activity;
+var teachers = [{id:4372,name:"王老师",lab:false}];
+var actTeacherId = [];
+var actTeacherName = [];
+for (var i = 0; i < teachers.length; i++) { actTeacherId.push(teachers[i].id); actTeacherName.push(teachers[i].name); }
+activity = new TaskActivity(actTeacherId.join(','),actTeacherName.join(','),"297318(E0100220.08)","大学物理Ⅱ(E0100220.08)","3020","停课","00000000001000000000000000000000000000000000000000000",null,null,assistantName,"","");
+index =0*unitCount+0;
+table0.activities[index][table0.activities[index].length]=activity;
+table0.marshalTable(2,1,12);
+fillTable(table0,7,12,0);
+</script></body></html>

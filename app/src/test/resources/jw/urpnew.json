@@ -1,0 +1,4 @@
+{"allUnits":100,"xkxx":[{"001_01":{"courseName":"概率论","attendClassTeacher":"吴老师* ","timeAndPlaceList":[
+  {"classDay":3,"classSessions":3,"continuingSession":2,"classWeek":"111111110000000000000000","weekDescription":"1-8周","teachingBuildingName":"一教","classroomName":"101"}]},
+ "002_01":{"courseName":"编译原理","attendClassTeacher":"郑老师*","timeAndPlaceList":[
+  {"classDay":5,"classSessions":7,"continuingSession":3,"classWeek":"","weekDescription":"2-16周(双)","teachingBuildingName":"二教","classroomName":"205"}]}}]}

@@ -1,0 +1,22 @@
+<html><head><script>
+var table0 = new CourseTable(2026,105);
+var unitCount = 12;
+var index=0;
+var activity=null;
+activity = new TaskActivity("1234","冯老师","5678(MATH101.01)","离散数学(MATH101.01)","88","理科楼301","01111111111111111000000000000000000000000000000000000",null,null,"","","");
+index =1*unitCount+2;
+table0.activities[index][table0.activities[index].length]=activity;
+index =1*unitCount+3;
+table0.activities[index][table0.activities[index].length]=activity;
+var teachers = [{id:12,name:"陈老师",lab:false},{id:13,name:"褚老师",lab:false}];
+var actTeacherId = [];
+var actTeacherName = [];
+for (var i = 0; i < teachers.length; i++) { actTeacherId.push(teachers[i].id); actTeacherName.push(teachers[i].name); }
+activity = new TaskActivity(actTeacherId.join(','),actTeacherName.join(','),"999(CS201.02)","计算机网络(CS201.02)","77","文科楼B12","00101010101010101000000000000000000000000000000000000",null,null,assistantName,"","");
+index =4*unitCount+6;
+table0.activities[index][table0.activities[index].length]=activity;
+index =4*unitCount+7;
+table0.activities[index][table0.activities[index].length]=activity;
+index =4*unitCount+8;
+table0.activities[index][table0.activities[index].length]=activity;
+</script></head><body></body></html>

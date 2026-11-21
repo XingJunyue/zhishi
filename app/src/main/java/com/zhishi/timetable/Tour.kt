@@ -1,0 +1,186 @@
+package com.zhishi.timetable
+
+import android.content.Context
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+
+/** 教程的一页：标题、说明，open = 「去看看」打开哪一页（同 Nav.open 的写法，比如 "table:1"）。 */
+data class TourPage(val mark: String, val title: String, val body: String, val open: String? = null)
+
+/**
+ * 应用内教程：
+ *  - 首次安装：完整的新手引导（FIRST），可跳过。
+ *  - 每次更新：这个版本的新功能（WHATS_NEW），可跳过。记下上次看过的 versionCode 和看过的条目 id。
+ *  - 设置里「新手教程」随时重看。
+ *
+ * 以后每个版本：在 WHATS_NEW 最前面加一条 Release（id 起一个新的、以后不要改），文案六种语言都补上。
+ * 规则见仓库根目录 AGENTS.md。
+ */
+object Tour {
+    class Release(val id: String, val pages: List<TourPage>)
+
+    val FIRST = listOf(
+        TourPage("知", "欢迎来到知时", "好雨知时节。知时是一张安静的课表：导入一次，每天打开就知道现在、下一节上什么。随时可以跳过，之后在「我的」里能重看。"),
+        TourPage("导", "从教务导入", "课表右上角点「＋」→「从教务导入」，输入学校名就能填好教务网址和类型，登录后点「导入课表」。也支持日历订阅链接、Excel / CSV、截图识别。", "table:1"),
+        TourPage("期", "开学日期", "导入后在「学期与显示」里确认开学日期——第几周、本周有没有这门课都靠它。", "table:5"),
+        TourPage("课", "点格子加课，点课块修改", "左右滑切换周。课块上可以标出「重要 / 普通 / 水课」，只是提醒自己的标签，不想要可以关掉。", "table:0"),
+        TourPage("办", "待办和日历", "底部「待办」记作业、考试和要交的东西，可以关联某门课、到点提醒；「日历」按月看哪天有课、哪天有待办。", "todo"),
+        TourPage("件", "桌面小部件", "4×2 和 2×2 两种：正在上的课、剩余时间和下一节，一眼就看到。在「我的 → 桌面小部件」里一键添加。", "widget"),
+        TourPage("皮", "六套插画皮肤", "春雨、宣纸、青瓷、暮山、夜航、樱，每套都有浅色和深色插画，桌面小部件跟着一起换。在「我的」里选。", "settings"),
+    )
+
+    /** 新版本在最前面加。id 一旦发出去就不要改（用来记「看过没有」）。 */
+    val WHATS_NEW = listOf(
+        Release("redesign", listOf(
+            TourPage("新", "全新的样子", "六套皮肤都换成了整屏插画，浅色深色各一张；课表、底部导航和应用图标也都重新设计了。在「我的」里换皮肤。", "settings"),
+            TourPage("办", "新增待办", "底部「待办」记作业、考试和要交的东西：可以设截止时间、关联某门课、到点提醒。会一起放进课表备份。", "todo"),
+            TourPage("历", "新增日历", "底部「日历」按月看哪天有课、哪天有待办，点一天就列出来。", "calendar"),
+            TourPage("件", "小部件跟着新皮肤", "桌面小部件换成新皮肤的颜色，还带一层淡淡的插画；换皮肤马上一起变。", "widget"),
+        )),
+        Release("skins", listOf(
+            TourPage("皮", "六套皮肤", "在「设置 → 皮肤」里选：春雨、宣纸、青瓷、暮山、夜航、樱。每套都有浅色和深色，可以跟随系统。", "settings"),
+            TourPage("件", "小部件跟着换色", "换了皮肤或深浅色，桌面上的课表小部件马上一起变，排版和内容不变。", "widget"),
+        )),
+    )
+
+    /** 正在显示哪一套："first" / "new" / null。 */
+    val show = mutableStateOf<String?>(null)
+
+    private fun p(c: Context) = c.getSharedPreferences("tour", Context.MODE_PRIVATE)
+
+    // ---------------- 纯逻辑（单测） ----------------
+
+    /** 第一次跑到有教程的版本：没走过引导的是新装（要看完整引导），走过的是老用户升级（只看新功能）。 */
+    fun isFreshInstall(hasTourState: Boolean, guided: Boolean) = !hasTourState && !guided
+
+    /** 升级后要看的新功能：versionCode 比上次看过的大，且还有没看过的条目。 */
+    fun pending(lastCode: Int, cur: Int, seen: Set<String>, all: List<Release> = WHATS_NEW): List<Release> =
+        if (cur > lastCode) all.filter { it.id !in seen } else emptyList()
+
+    // ---------------- 存储 ----------------
+
+    /** 在 MainActivity.onCreate 里调用一次：第一次装好时记下「新装」，并把已有的新功能都当看过。 */
+    fun init(c: Context) {
+        val pr = p(c)
+        if (pr.contains("code")) return
+        val fresh = isFreshInstall(false, false)
+        pr.edit().putInt("code", if (fresh) BuildConfig.VERSION_CODE else 0)
+            .putBoolean("firstPending", fresh)
+            .putStringSet("seen", if (fresh) WHATS_NEW.map { it.id }.toSet() else emptySet()).apply()
+    }
+
+    /** 冒烟测试 / 示例数据：全部当看过，不弹。 */
+    fun skipAll(c: Context) {
+        p(c).edit().putInt("code", BuildConfig.VERSION_CODE).putBoolean("firstPending", false)
+            .putStringSet("seen", WHATS_NEW.map { it.id }.toSet()).apply()
+    }
+
+    /** 该弹什么就弹什么（在主界面出现时调用）。 */
+    fun check(c: Context) {
+        if (show.value != null) return
+        val pr = p(c)
+        if (!pr.contains("code")) init(c)
+        if (pr.getBoolean("firstPending", false)) { show.value = "first"; return }
+        val seen = pr.getStringSet("seen", emptySet()) ?: emptySet()
+        if (pending(pr.getInt("code", 0), BuildConfig.VERSION_CODE, seen).isNotEmpty()) show.value = "new"
+        else if (pr.getInt("code", 0) < BuildConfig.VERSION_CODE) pr.edit().putInt("code", BuildConfig.VERSION_CODE).apply()
+    }
+
+    fun pages(c: Context, which: String): List<TourPage> = when (which) {
+        "first" -> FIRST
+        "new" -> {
+            val seen = p(c).getStringSet("seen", emptySet()) ?: emptySet()
+            WHATS_NEW.filter { it.id !in seen }.flatMap { it.pages }.ifEmpty { WHATS_NEW.firstOrNull()?.pages ?: emptyList() }
+        }
+        else -> emptyList()
+    }
+
+    /** 看完或跳过：都算看过。 */
+    fun done(c: Context, which: String) {
+        val e = p(c).edit().putInt("code", BuildConfig.VERSION_CODE)
+        if (which == "first") e.putBoolean("firstPending", false)
+        e.putStringSet("seen", WHATS_NEW.map { it.id }.toSet()).apply()
+        show.value = null
+    }
+}
+
+/** 盖在主界面上的教程卡片：翻页时内容左右滑动，指示点跟着伸缩。 */
+@Composable
+fun TourHost() {
+    val which = Tour.show.value
+    val c = LocalContext.current
+    AnimatedVisibility(which != null, enter = fadeIn(tween(220)), exit = fadeOut(tween(180))) {
+        val w = which ?: return@AnimatedVisibility
+        val pages = remember(w) { Tour.pages(c, w) }
+        if (pages.isEmpty()) { LaunchedEffect(w) { Tour.done(c, w) }; return@AnimatedVisibility }
+        var i by remember(w) { mutableStateOf(0) }
+        BackHandler { if (i > 0) i-- else Tour.done(c, w) }
+        Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.5f)).clickable(enabled = true, onClick = {}), contentAlignment = Alignment.Center) {
+            Column(Modifier.padding(22.dp).widthIn(max = 420.dp).fillMaxWidth().clip(RoundedCornerShape(32.dp)).background(C.Card)) {
+                // 顶部的雨色渐变，放大号的字
+                Box(Modifier.fillMaxWidth().height(150.dp).background(Brush.verticalGradient(listOf(C.ClayPale, C.Card)))) {
+                    Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 10.dp, top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (w == "new") tr("这个版本的新功能") else tr("新手教程"), fontSize = 12.sp, color = C.Soft, letterSpacing = 1.sp, modifier = Modifier.weight(1f))
+                        Text(tr("跳过"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(10.dp)).clickable { Tour.done(c, w) }.padding(horizontal = 12.dp, vertical = 8.dp))
+                    }
+                    AnimatedContent(i, transitionSpec = {
+                        val dir = if (targetState > initialState) 1 else -1
+                        (slideInHorizontally(tween(300)) { it / 3 * dir } + fadeIn(tween(300))) togetherWith (slideOutHorizontally(tween(240)) { -it / 3 * dir } + fadeOut(tween(200)))
+                    }, modifier = Modifier.align(Alignment.Center).padding(top = 18.dp), label = "mark") { k ->
+                        val pg = pages[k.coerceIn(0, pages.size - 1)]
+                        // 第一页（欢迎）用应用图标，其余页是主色圆里一个字（非中日韩界面也用图标）
+                        if (k == 0 || !Tr.cjk) AppIcon(78.dp)
+                        else Box(Modifier.size(78.dp).clip(CircleShape).background(C.Clay), contentAlignment = Alignment.Center) {
+                            Text(pg.mark, fontSize = 34.sp, fontWeight = FontWeight.Bold, color = C.OnClay)
+                        }
+                    }
+                }
+                AnimatedContent(i, transitionSpec = {
+                    val dir = if (targetState > initialState) 1 else -1
+                    (slideInHorizontally(tween(300)) { it / 4 * dir } + fadeIn(tween(300))) togetherWith (slideOutHorizontally(tween(240)) { -it / 4 * dir } + fadeOut(tween(200)))
+                }, label = "page") { k ->
+                    val pg = pages[k.coerceIn(0, pages.size - 1)]
+                    Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp)) {
+                        Text(tr(pg.title), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = C.Ink, letterSpacing = 0.5.sp)
+                        Text(tr(pg.body), fontSize = 14.sp, color = C.Soft, lineHeight = 22.sp, modifier = Modifier.padding(top = 10.dp).heightIn(min = 88.dp))
+                        pg.open?.let { o ->
+                            Text(tr("去看看 ›"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
+                                modifier = Modifier.padding(top = 6.dp).clip(RoundedCornerShape(10.dp)).clickable { Tour.done(c, w); Nav.open.value = o }.padding(vertical = 6.dp, horizontal = 2.dp))
+                        }
+                    }
+                }
+                Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 18.dp, top = 14.dp, bottom = 20.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Row(Modifier.weight(1f), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        pages.indices.forEach { k ->
+                            val wd by animateDpAsState(if (k == i) 20.dp else 7.dp, label = "dot")
+                            Box(Modifier.size(wd, 7.dp).clip(CircleShape).background(if (k == i) C.Clay else C.Track))
+                        }
+                    }
+                    if (i > 0) Text(tr("上一步"), fontSize = 14.sp, color = C.Soft, modifier = Modifier.clip(RoundedCornerShape(12.dp)).clickable { i-- }.padding(horizontal = 12.dp, vertical = 10.dp))
+                    val last = i == pages.size - 1
+                    Text(if (last) tr("开始使用") else tr("下一步"), fontSize = 14.sp, color = C.OnClay, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
+                        modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(C.Clay).clickable { if (last) Tour.done(c, w) else i++ }.padding(horizontal = 20.dp, vertical = 11.dp))
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,8 @@
+{"code":"0","datas":{"getMyScheduleDetail":{"arrangedList":[
+ {"courseName":"高等数学①(一)","dayOfWeek":1,"beginSection":1,"endSection":2,"placeName":"教103","campusName":"浑南校区",
+  "titleWeekTeacherClassroomDetail":["1-16周 刘思妤 浑南校区 教103"]},
+ {"courseName":"大学英语(一)","dayOfWeek":3,"beginSection":3,"endSection":4,"placeName":"机401-语音室","campusName":"浑南校区",
+  "titleWeekTeacherClassroomDetail":["1-8周,10-16周(双) 宋岩 浑南校区 机401-语音室","9周 宋岩 浑南校区 文管B201"]},
+ {"courseName":"无机化学(1)","dayOfWeek":5,"beginSection":5,"endSection":6,"placeName":"逸310","campusName":"南湖校区",
+  "cellWeekTeacherClassroomDetail":[{"text":"3、5、7周 徐君莉,谢宏伟 南湖校区 逸310"}]}
+]}}}

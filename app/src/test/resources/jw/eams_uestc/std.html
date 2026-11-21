@@ -1,0 +1,21 @@
+<html><head><script src="/eams/static/scripts/course/TaskActivity.js"></script></head><body>
+<form id="courseTableForm" name="courseTableForm" action="courseTableForStd!courseTable.action" method="post">
+<input type="hidden" name="ignoreHead" value="1"/>
+<input type="hidden" name="setting.kind" value="std"/>
+<select id="courseTableType" name="setting.kind"><option value="std">学生课表</option><option value="class">班级课表</option></select>
+<script type="text/javascript">
+  semesterCalendar({empty:"false",onChange:"",value:"523"},"searchTable()");
+</script>
+<input type="hidden" name="startWeek" value=""/>
+</form>
+<script>
+function searchTable(){
+  var form = document.courseTableForm;
+  if(jQuery("#courseTableType").val()=="std"){
+    bg.form.addInput(form,"ids","987654");
+  }else{
+    bg.form.addInput(form,"ids","123123");
+  }
+  bg.form.submit(form,null,"contentDiv");
+}
+</script></body></html>
