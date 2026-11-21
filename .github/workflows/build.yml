@@ -21,7 +21,8 @@ jobs:
       - name: Signing key
         env: { KS_B64: "${{ secrets.KS_B64 }}" }
         run: |
-          echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/zhishi.p12"
+          printf %s "$KS_B64" | tr -d " \r\n\t" | base64 -d > "$RUNNER_TEMP/zhishi.p12"
+          ls -l "$RUNNER_TEMP/zhishi.p12"
           echo "KS_FILE=$RUNNER_TEMP/zhishi.p12" >> "$GITHUB_ENV"
       - name: Unit tests
         run: gradle :app:testDebugUnitTest $PV --no-daemon
