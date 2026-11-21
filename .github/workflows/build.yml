@@ -21,7 +21,9 @@ jobs:
       - name: Signing key
         env: { KS_B64: "${{ secrets.KS_B64 }}" }
         run: |
-          printf %s "$KS_B64" | tr -d " \r\n\t" | base64 -d > "$RUNNER_TEMP/zhishi.p12"
+          c=$(printf %s "$KS_B64" | tr -d " \r\n\t")
+          echo "len=${#c} head=${c:0:8} tail=${c: -8} bad=$(printf %s "$c" | tr -d 'A-Za-z0-9+/=' | wc -c) pass_len=${#KS_PASS}"
+          printf %s "$c" | base64 -d > "$RUNNER_TEMP/zhishi.p12"
           ls -l "$RUNNER_TEMP/zhishi.p12"
           echo "KS_FILE=$RUNNER_TEMP/zhishi.p12" >> "$GITHUB_ENV"
       - name: Unit tests
