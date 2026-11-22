@@ -249,13 +249,20 @@ object TodoAlarm {
         c.getSystemService(AlarmManager::class.java)?.cancel(p); p.cancel()
     }
     /** 重排全部：App 进程一启动（打开 App、小部件刷新、开机）就排一遍。被系统清掉的闹钟会补上，错过的（还没到截止）马上补一次提醒。 */
-    fun rescheduleAll(c: Context) = try {
-        val l = TodoStore.all(c)
-        l.forEach { sync(c, it) }
-        val keep = l.map { key(it) }.toSet()
-        val f = fired(c); val stale = f.all.keys.filter { it !in keep }
-        if (stale.isNotEmpty()) f.edit().apply { stale.forEach { remove(it) } }.apply()
-    } catch (x: Exception) {}
+    fun rescheduleAll(c: Context) {
+        try {
+            val l = TodoStore.all(c)
+            l.forEach { sync(c, it) }
+            val keep = l.map { key(it) }.toSet()
+            val f = fired(c)
+            val stale = f.all.keys.filter { it !in keep }
+            if (stale.isNotEmpty()) {
+                val e = f.edit()
+                stale.forEach { e.remove(it) }
+                e.apply()
+            }
+        } catch (x: Exception) {}
+    }
 
     /** 发一条通知（到点提醒和「测试通知」共用）。 */
     fun post(c: Context, notifId: Int, title: String, text: String) {
