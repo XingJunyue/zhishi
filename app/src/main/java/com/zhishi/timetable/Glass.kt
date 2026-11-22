@@ -109,9 +109,9 @@ fun Modifier.glassSource(src: GlassSource): Modifier = this
     .onGloballyPositioned { src.coords = it }
     .drawWithContent {
         val l = src.layer
-        if (l == null) { drawContent(); return@drawWithContent }
-        l.record { this@drawWithContent.drawContent() }
-        drawLayer(l)
+        if (l == null || GlassLens.broken) { drawContent(); return@drawWithContent }
+        val ok = try { l.record { this@drawWithContent.drawContent() }; true } catch (x: Throwable) { GlassLens.fail("record", x); false }
+        if (ok) drawLayer(l) else drawContent()
     }
 
 /**
@@ -182,14 +182,28 @@ half4 main(float2 xy) {
 }
 """
 
-    /** 编译失败（某些 GPU / 模拟器）就记下来，以后都走老画法。 */
+    /** 编译 / 设参数 / 绘制失败（某些 GPU 驱动、模拟器）一次就记下来：本进程立刻、以后每次启动都走老画法。
+     *  记在 SharedPreferences `glass` 的 `off`（= 出错时的 versionCode），装了新版本会再试一次。 */
     @Volatile var broken = false
+    private var prefs: android.content.SharedPreferences? = null
+
+    /** ZhishiApp.onCreate 里调用。 */
+    fun init(c: android.content.Context) {
+        try {
+            val p = c.getSharedPreferences("glass", android.content.Context.MODE_PRIVATE); prefs = p
+            if (p.getInt("off", 0) == BuildConfig.VERSION_CODE) broken = true
+        } catch (_: Throwable) {}
+    }
+
+    fun fail(where: String, x: Throwable) {
+        broken = true
+        android.util.Log.w("ZhishiGlass", "lens $where failed, glass lens off: $x")
+        try { prefs?.edit()?.putInt("off", BuildConfig.VERSION_CODE)?.apply() } catch (_: Throwable) {}
+    }
 
     fun make(): Any? {
         if (!supported || broken) return null
-        return try { android.graphics.RuntimeShader(SRC) } catch (x: Throwable) {
-            broken = true; android.util.Log.w("ZhishiGlass", "lens shader failed: ${x.message}"); null
-        }
+        return try { android.graphics.RuntimeShader(SRC) } catch (x: Throwable) { fail("shader", x); null }
     }
 }
 
@@ -275,7 +289,7 @@ fun Modifier.liquidGlass(
             val at = pos.value
             val srcLayer = src?.layer
             var lensed = false
-            if (shader != null && lensLayer != null && srcLayer != null && at != null && lens != null && size.minDimension > 1f &&
+            if (!GlassLens.broken && shader != null && lensLayer != null && srcLayer != null && at != null && lens != null && size.minDimension > 1f &&
                 android.os.Build.VERSION.SDK_INT >= 33) {
                 try {
                     val sh = shader as android.graphics.RuntimeShader
@@ -299,8 +313,7 @@ fun Modifier.liquidGlass(
                     clipPath(path) { drawLayer(lensLayer) }
                     lensed = true
                 } catch (x: Throwable) {
-                    GlassLens.broken = true
-                    android.util.Log.w("ZhishiGlass", "lens draw failed: ${x.message}")
+                    GlassLens.fail("draw", x)
                 }
             }
             if (lens?.cover == true) drawPath(path, base)

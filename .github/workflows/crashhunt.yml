@@ -1,12 +1,12 @@
 name: crashhunt
-# 崩溃排查：推到 crashhunt* 分支时只跑 tools/crashhunt.sh（qa = R8 混淆后带测试钩子；再跑 debug），不发版
+# 崩溃排查（只手动触发）：完整跑 tools/crashhunt.sh（qa = R8 混淆后带测试钩子；再跑 debug），不发版。
+# 每次推 main 的 build.yml 冒烟测试里已经带 QUICK=1 的精简版。
 on:
-  push:
-    branches: ['crashhunt*']
   workflow_dispatch:
 jobs:
   hunt:
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
