@@ -6,9 +6,11 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- 「从日历导入」：读系统日历里的课程日程 -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
-    <!-- 待办到点提醒：通知（第一次打开提醒时才申请）；有精确闹钟权限就用精确的，没有就退回不精确的；开机后把提醒重新排上 -->
+    <!-- 待办到点提醒：通知（第一次打开提醒时才申请）；精确闹钟（USE_EXACT_ALARM / 旧系统 SCHEDULE_EXACT_ALARM）；开机后把提醒重新排上 -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" android:maxSdkVersion="32" />
+    <!-- Android 13+：装上即有精确闹钟权限（不走应用商店，不受 Play 政策限制）；小米等手机默认不给 SCHEDULE_EXACT_ALARM -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <application
         android:name=".ZhishiApp"

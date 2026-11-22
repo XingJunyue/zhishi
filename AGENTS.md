@@ -6,8 +6,8 @@
 - 只做课表和学习相关：课表格子与编辑、教务导入、日历 / 文件 / 截图导入、学期与节次设置、**待办**、月历视图、课表小部件、皮肤、设置、关于与更新、教程。
 - 空状态插画（待办、课表没课）：`InkArt.kt` 的一笔水墨圆相 + 带锋的勾（待办）/ 三道短横（课表）+ 小朱印，墨色跟皮肤，进场一笔笔写出（build-16，用户嫌原来的粉圆 + 新芽丑）。不要换回卡通风。
 - 待办是用户明确要的（2026-11 改版时提出）：标题、备注、截止时间（精确到分钟的时 / 分滚轮，或全天 `allDay`）、快捷时间（`Todos.preset`、「下次上课前」= `Todos.nextClass`）、关联课程（按课名）、完成、提醒（可提前 `before` 分钟，全天从当天 8:00 算；`Todos.alarmAt` 决定闹钟时刻）；分组 已过期 / 今天 / 即将 / 已完成；左右滑删除；存 SharedPreferences `todo` 的 `items`，课表备份 / 导出里带 `todos` 字段（旧备份没有就不动现有待办）。逻辑在 `Todo.kt`（`Todos` 纯函数有单测 `TodoTest`），界面在 `TodoUi.kt`。
-- 到点提醒：`TodoAlarm` 用 AlarmManager，有精确闹钟权限（`canScheduleExactAlarms`）才用精确的，否则不精确；通知权限 POST_NOTIFICATIONS 只在用户第一次打开某条待办的提醒时申请。`TodoReminder` 发通知，开机 / 更新后重排。
-- 不做任何应用守护 / 拦截 / 专注 / 使用时长统计；不要加无障碍、使用情况访问、悬浮窗、设备管理、查询全部应用、通知监听这类权限。（待办提醒用的 POST_NOTIFICATIONS、SCHEDULE_EXACT_ALARM、RECEIVE_BOOT_COMPLETED 是允许的。）
+- 到点提醒：`TodoAlarm` 用 AlarmManager 精确闹钟（Android 13+ 靠 USE_EXACT_ALARM 装上即有；SCHEDULE_EXACT_ALARM 只给 ≤32，小米等默认不给它，之前退成不精确导致收不到）。通知权限 POST_NOTIFICATIONS 只在用户第一次打开某条待办的提醒时申请。`TodoReminder` 发通知；`ZhishiApp.onCreate`（任何进程启动）、打开 App、开机 / 更新后都 `rescheduleAll`，被系统清掉的闹钟补上，错过的（未到截止）补发一次。已提醒过的记在 prefs `todo_fired`（键 `id@提醒时刻`），防止重复提醒。编辑页开提醒时有「发一条测试通知」和跳系统应用设置（自启动 / 省电）。
+- 不做任何应用守护 / 拦截 / 专注 / 使用时长统计；不要加无障碍、使用情况访问、悬浮窗、设备管理、查询全部应用、通知监听这类权限。（待办提醒用的 POST_NOTIFICATIONS、SCHEDULE_EXACT_ALARM、USE_EXACT_ALARM、RECEIVE_BOOT_COMPLETED 是允许的。）
 
 ## 界面结构（2026-11 改版，照用户给的六张皮肤参考图）
 - 底部液态玻璃导航四项：课表 / 待办 / 日历 / 我的（`MainActivity.App`、`BottomBar`）。没有侧栏了。「我的」= 原来的设置页（`MeScreen`，打开名 `settings` 或 `me`），小部件页、关于页从「我的」点进去，左上角返回。

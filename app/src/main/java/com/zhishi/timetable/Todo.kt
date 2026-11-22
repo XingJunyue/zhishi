@@ -223,24 +223,53 @@ object TodoAlarm {
         PendingIntent.getBroadcast(c, id.hashCode(), Intent(c, TodoReminder::class.java).putExtra("id", id),
             PendingIntent.FLAG_IMMUTABLE or (if (create) PendingIntent.FLAG_UPDATE_CURRENT else PendingIntent.FLAG_NO_CREATE))
 
+    /** 已经提醒过的「id@提醒时刻」：防止每次打开 App / 进程重启都把同一条再提醒一遍；改了时间就是新的键，会重新提醒。 */
+    private fun fired(c: Context) = c.getSharedPreferences("todo_fired", Context.MODE_PRIVATE)
+    private fun key(t: Todo) = t.id + "@" + (Todos.remindAt(t) ?: -1L)
+    fun wasFired(c: Context, t: Todo) = fired(c).getBoolean(key(t), false)
+    fun markFired(c: Context, t: Todo) { fired(c).edit().putBoolean(key(t), true).apply() }
+
     fun sync(c: Context, t: Todo) {
         val at = Todos.alarmAt(t, System.currentTimeMillis())
-        if (at == null) { cancel(c, t.id); return }
+        if (at == null || wasFired(c, t)) { cancel(c, t.id); return }
         val am = c.getSystemService(AlarmManager::class.java) ?: return
         val p = pi(c, t.id, true) ?: return
         try {
-            val exact = Build.VERSION.SDK_INT < 31 || am.canScheduleExactAlarms()
-            if (exact) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p)
+            // Android 13+ 声明了 USE_EXACT_ALARM，装上就有精确闹钟权限（小米等手机默认不给 SCHEDULE_EXACT_ALARM，之前会退成不精确的，省电时被拖很久甚至丢掉）
+            if (exactOk(c)) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p)
             else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p)
         } catch (x: SecurityException) {
             am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p)
         }
     }
+    fun exactOk(c: Context): Boolean = Build.VERSION.SDK_INT < 31 ||
+        (c.getSystemService(AlarmManager::class.java)?.canScheduleExactAlarms() ?: false)
     fun cancel(c: Context, id: String) {
         val p = pi(c, id, false) ?: return
         c.getSystemService(AlarmManager::class.java)?.cancel(p); p.cancel()
     }
-    fun rescheduleAll(c: Context) = try { TodoStore.all(c).forEach { sync(c, it) } } catch (x: Exception) {}
+    /** 重排全部：App 进程一启动（打开 App、小部件刷新、开机）就排一遍。被系统清掉的闹钟会补上，错过的（还没到截止）马上补一次提醒。 */
+    fun rescheduleAll(c: Context) = try {
+        val l = TodoStore.all(c)
+        l.forEach { sync(c, it) }
+        val keep = l.map { key(it) }.toSet()
+        val f = fired(c); val stale = f.all.keys.filter { it !in keep }
+        if (stale.isNotEmpty()) f.edit().apply { stale.forEach { remove(it) } }.apply()
+    } catch (x: Exception) {}
+
+    /** 发一条通知（到点提醒和「测试通知」共用）。 */
+    fun post(c: Context, notifId: Int, title: String, text: String) {
+        channel(c)
+        val open = PendingIntent.getActivity(c, notifId, Intent(c, MainActivity::class.java).putExtra("open", "todo")
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val n = android.app.Notification.Builder(c, CHANNEL)
+            .setSmallIcon(R.drawable.ic_stat_todo).setContentTitle(title).setContentText(text)
+            .setStyle(android.app.Notification.BigTextStyle().bigText(text))
+            .setCategory(android.app.Notification.CATEGORY_REMINDER).setShowWhen(true)
+            .setContentIntent(open).setAutoCancel(true).build()
+        try { c.getSystemService(NotificationManager::class.java)?.notify(notifId, n) } catch (x: SecurityException) {}
+    }
+    fun test(c: Context) = post(c, 0x7e57, tr("测试提醒"), tr("能看到这条，说明知时的通知是通的。"))
 
     fun canNotify(c: Context) = Build.VERSION.SDK_INT < 33 ||
         c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -264,15 +293,11 @@ class TodoReminder : BroadcastReceiver() {
         val id = i.getStringExtra("id") ?: return
         val t = TodoStore.all(c).firstOrNull { it.id == id } ?: return
         if (t.done || !t.remind || !TodoAlarm.canNotify(c)) return
-        TodoAlarm.channel(c)
-        val open = PendingIntent.getActivity(c, id.hashCode(), Intent(c, MainActivity::class.java).putExtra("open", "todo")
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
         val now = System.currentTimeMillis()
+        if (TodoAlarm.wasFired(c, t)) return
         val dueLine = if (Todos.endOf(t) <= now) tr("到截止时间了") else tr("截止：{0}", dueText(t.due, t.allDay))
         val text = listOf(dueLine, t.course, t.note).filter { it.isNotBlank() }.joinToString(" · ")
-        val n = android.app.Notification.Builder(c, TodoAlarm.CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_todo).setContentTitle(t.title).setContentText(text)
-            .setContentIntent(open).setAutoCancel(true).build()
-        try { c.getSystemService(NotificationManager::class.java)?.notify(id.hashCode(), n) } catch (x: SecurityException) {}
+        TodoAlarm.markFired(c, t)
+        TodoAlarm.post(c, id.hashCode(), t.title, text)
     }
 }
