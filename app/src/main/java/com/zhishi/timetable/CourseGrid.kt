@@ -484,7 +484,7 @@ private fun SheetRow(mark: String, t: String, sub: String, onClick: () -> Unit) 
  *
  * 闪退记录（build-15～17）：今天的课全部上完后，从小部件进 App、导入课表后回到课表页，首帧组合 ArrayIndexOutOfBoundsException
  * （IntStack.peek2 / ComposerImpl.endRoot）。根源是这块在 Compose 编译器 1.5.x + 运行时 1.7（BOM 2024.09）下组栈错位：
- * 最早是 inline 的 Row 里 `return@Row` 提前返回，build-17 拆成 DoneToday() 后仍是「同一个 Row 里按条件换内容 + 按条件拼 clickable」。
+ * 最早是 inline 的 Row 里用带标签的 return 提前返回，build-17 拆成 DoneToday() 后仍是「同一个 Row 里按条件换内容 + 按条件拼 clickable」。
  * 现在的写法（build-18 重做）：
  *  - 整个函数没有任何提前 return；
  *  - 「上完啦」和「正在上 / 下一节」是两个各自完整的 composable，各有自己的 Row 和固定的 Modifier 链，不在 inline 布局里切换内容；
