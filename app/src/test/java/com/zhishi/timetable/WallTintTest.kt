@@ -54,8 +54,19 @@ class WallTintTest {
         assertEquals(0.75f, WallTint.fillAlpha(0), 0.001f)
         assertTrue("默认比 build-15 的 52% / 62% 清透得多", WallTint.fillAlpha(WidgetStyle.CLEAR_DEFAULT) < 0.30f)
         assertTrue(WallTint.fillAlpha(90) < 0.1f)
-        assertEquals(WallTint.fillAlpha(90), WallTint.fillAlpha(100), 0.0001f)
         assertTrue(WallTint.plateAlpha(90) > WallTint.plateAlpha(0))
-        assertTrue(WallTint.shadowAlpha(90, true) <= 1f)
+        assertTrue(WallTint.shadowAlpha(100, true) <= 1f)
+        // 0–90 和 build-20 一样
+        assertEquals(0.075f, WallTint.fillAlpha(90, true), 0.001f)
+        assertEquals(0.35f, WallTint.plateAlpha(90), 0.001f)
+        // 拉满 = 导航条选中水滴：卡片底和小玻璃块一样，深 10% / 浅 30%，没有字区淡底
+        assertEquals(0.10f, WallTint.fillAlpha(100, true), 0.0001f)
+        assertEquals(0.30f, WallTint.fillAlpha(100, false), 0.0001f)
+        for (d in listOf(true, false)) assertEquals(WallTint.fillAlpha(100, d), WallTint.innerAlpha(100, d), 0.0001f)
+        assertEquals(0f, WallTint.plateAlpha(100), 0.0001f)
+        assertEquals(0.10f, WallTint.innerAlpha(100, true), 0.0001f)
+        assertEquals(0.30f, WallTint.innerAlpha(100, false), 0.0001f)
+        assertEquals(0.55f, WallTint.innerAlpha(65, true), 0.0001f)
+        assertEquals(WallTint.fillAlpha(100), WallTint.fillAlpha(150), 0.0001f)
     }
 }

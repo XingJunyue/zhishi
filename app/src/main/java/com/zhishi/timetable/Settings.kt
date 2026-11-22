@@ -182,7 +182,7 @@ fun WidgetScreen() {
             val clear = remember(sv) { WidgetStyle.clear(c) }
             var moved by remember { mutableStateOf(0) }
             LaunchedEffect(moved) { if (moved > 0) { kotlinx.coroutines.delay(400); CourseWidgets.safeUpdate(c) } }
-            Column(Modifier.padding(top = 10.dp)) { StepSlider(tr("透明度"), clear, 0..90, 5, "%") { if (it != clear) { WidgetStyle.setClear(c, it, redraw = false); moved++ } } }
+            Column(Modifier.padding(top = 10.dp)) { StepSlider(tr("透明度"), clear, 0..WallTint.MAX, 5, "%") { if (it != clear) { WidgetStyle.setClear(c, it, redraw = false); moved++ } } }
             Note(tr("桌面小部件看不到身后壁纸的像素，做不了真正的折射；这里是按壁纸配色，让玻璃和壁纸更搭。"))
         }
         WidgetCard(tr("课表 4×2"), true, canPin) { pin(CourseWidget4::class.java) }

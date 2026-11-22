@@ -89,12 +89,30 @@ object WallTint {
         )
     }
 
-    /** 透明度（0..90%）→ 玻璃底的不透明度：0% ≈ 75% 实，默认 65% 透明 ≈ 26% 实，90% ≈ 7.5% 实。 */
-    fun fillAlpha(clear: Int): Float = 0.75f * (1f - clear.coerceIn(0, 90) / 100f)
-    /** 字区那层局部淡底：玻璃越透这层越实一点，保证字读得清（左 → 右渐隐）。 */
-    fun plateAlpha(clear: Int): Float = 0.08f + 0.30f * clear.coerceIn(0, 90) / 100f
+    /**
+     * 透明度 0..100%（build-21 起上限 100，原来 90）。0–90 和原来完全一样：0% ≈ 75% 实，默认 65% ≈ 26% 实，90% ≈ 7.5% 实。
+     * 90 → 100 往 App 底部导航条里选中的玻璃水滴（滑块）靠：拉满时卡片底和里面的小玻璃块都 = 水滴的底
+     * （深色白 10%、浅色白微染主色 30%，见 MainActivity.BottomBar），字区淡底完全去掉。用户 2026-11-22 定的：卡片和小块保持一致，都以滑块为基准。
+     */
+    const val MAX = 100
+    /** 90 → 100 这一段走到哪了（0..1）。 */
+    fun toBar(clear: Int): Float = ((clear.coerceIn(0, MAX) - 90) / 10f).coerceIn(0f, 1f)
+    fun barFill(dark: Boolean): Float = if (dark) 0.10f else 0.30f
+    fun fillAlpha(clear: Int, dark: Boolean = false): Float {
+        val c = clear.coerceIn(0, MAX)
+        val base = 0.75f * (1f - minOf(c, 90) / 100f)
+        return base + (barFill(dark) - base) * toBar(c)
+    }
+    /** 字区那层局部淡底：0–90 玻璃越透这层越实一点，保证字读得清（左 → 右渐隐）；90 → 100 淡出到 0（导航条没有这层）。 */
+    fun plateAlpha(clear: Int): Float = (0.08f + 0.30f * minOf(clear.coerceIn(0, MAX), 90) / 100f) * (1f - toBar(clear))
     /** 字的细影强度（0..1）：玻璃越透越明显，但始终是 0.7px 的细影，不是模糊光晕。 */
-    fun shadowAlpha(clear: Int, dark: Boolean): Float = (if (dark) 0.40f else 0.30f) + (if (dark) 0.40f else 0.45f) * clear.coerceIn(0, 90) / 100f
+    fun shadowAlpha(clear: Int, dark: Boolean): Float =
+        ((if (dark) 0.40f else 0.30f) + (if (dark) 0.40f else 0.45f) * clear.coerceIn(0, MAX) / 100f).coerceAtMost(1f)
+    /** 小玻璃块（下一节）的不透明度：0–90 原样（深 55%、浅 50%），90 → 100 走到和卡片底一样的水滴 10% / 30%。 */
+    fun innerAlpha(clear: Int, dark: Boolean): Float {
+        val a = if (dark) 0.55f else 0.50f
+        return a + (barFill(dark) - a) * toBar(clear)
+    }
 
     // ---------- 读系统 ----------
     /** 现在的壁纸颜色；拿不到（Android 8.0、动态壁纸不给色、出错）就是 null，退回跟随皮肤。 */

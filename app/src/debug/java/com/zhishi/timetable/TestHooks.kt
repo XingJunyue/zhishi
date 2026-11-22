@@ -9,7 +9,7 @@ import java.io.File
 /**
  * 只在调试版里有：自动化测试用。
  *  --ez seed true   跳过引导，放几节示例课程
- *  --es wtint wall|skin / --ei wclear 0..90   小部件玻璃颜色来源 / 透明度
+ *  --es wtint wall|skin / --ei wclear 0..100   小部件玻璃颜色来源 / 透明度
  *  --es wallpaper dark|light   把模拟器壁纸换成一张深色 / 浅色的渐变图（只有调试版有 SET_WALLPAPER）
  *  --es seedat before|between|after|ending|offday|tiny   崩溃排查：按「现在」造今天的课（第一节还没开始 / 课间 / 今天的课都上完 /
  *                    一分钟后下课 / 今天没课 / 极短的课），并放各种边界待办（全天提醒、提前量、关联到今天已没课的课程、没日期却开着提醒）

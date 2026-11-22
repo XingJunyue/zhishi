@@ -177,7 +177,8 @@ object CourseWidgets {
             // 跟随皮肤时再铺一层很淡的皮肤插画；跟随壁纸时不铺（插画和壁纸会打架）
             glassCard(cv, lw, lh)
             if (!WALL) faintArt(c, cv, lw, lh)
-            glassShine(cv, lw, lh, R_CARD, 1.4f)
+            // 质感照导航条里选中的水滴（滑块）：spec 1.3、内发光 0.12，和里面的小玻璃块一致
+            glassShine(cv, lw, lh, R_CARD, 1.4f, spec = 1.3f, glow = 0.12f)
         }
         when {
             free -> freeCard(d, lw, lh, wide, now.doneAll)
@@ -219,9 +220,11 @@ object CourseWidgets {
      * 玻璃越透这层越实一点，字照样读得清，右边和下面露出壁纸。
      */
     private fun glassCard(cv: Canvas, w: Float, h: Float) {
-        val fill = mix(PAL.i(PAL.bg), PAL.i(PAL.acc), 0.06f)
+        val tinted = mix(PAL.i(PAL.bg), PAL.i(PAL.acc), 0.06f)
+        // 透明度 90 → 100：底色走向导航条选中水滴的颜色（和小玻璃块同一个）
+        val fill = mix(tinted, dropTone(), WallTint.toBar(CLEAR))
         val rect = RectF(0f, 0f, w, h)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(fill, WallTint.fillAlpha(CLEAR)) }
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(fill, WallTint.fillAlpha(CLEAR, DARK)) }
         cv.drawRoundRect(rect, R_CARD, R_CARD, p)
         val pa = WallTint.plateAlpha(CLEAR)
         val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -264,35 +267,67 @@ object CourseWidgets {
         return Triple((wDp * s).toInt().coerceAtLeast(1), (hDp * s).toInt().coerceAtLeast(1), s)
     }
 
-    /** 玻璃的光：顶部柔光（白 ~28% → 0，42% 高度内）、底边一点暗边（折射）、渐变亮边（左上亮 → 右下淡）。 */
-    private fun glassShine(cv: Canvas, w: Float, h: Float, r: Float, rim: Float, l: Float = 0f, t: Float = 0f, strong: Float = 1f) {
+    /**
+     * 玻璃的光，照 App 底部导航条 / 选中水滴的液态玻璃画（`Glass.kt` 的 liquidGlass + GlassLens 着色器，桌面上没有着色器，用画布近似）：
+     *  - 顶部柔光（浅色白 30% / 深色 16% → 0，42% 高度内）、底边暗边（深色黑 22%、浅色 7%）；
+     *  - 折射带：边缘 [band] 宽的一圈，越靠边越亮（着色器里的 sheen = bend × (0.06 + 0.22 × 朝光)），上边朝光更亮；
+     *  - 内发光：从边往里指数衰减（glow）；
+     *  - 亮边：跟着左上的光，左上最亮、中段弱、右下有一道内反光（0.16 + 0.95 × 朝光 + 0.45 × 背光²），深色 × 0.75；
+     *  - 外侧一根极淡的暗线。
+     * 卡片和小玻璃块都用 spec 1.3 / glow 0.12（= 导航条里选中的水滴）。
+     */
+    private fun glassShine(cv: Canvas, w: Float, h: Float, r: Float, rim: Float, l: Float = 0f, t: Float = 0f, strong: Float = 1f,
+                           spec: Float = 1.3f, glow: Float = 0.12f, band: Float = 0f) {
         val rect = RectF(l, t, l + w, t + h)
         val clip = Path().apply { addRoundRect(rect, r, r, Path.Direction.CW) }
+        val sp = spec * (if (DARK) 0.75f else 1f) * strong
         cv.save(); cv.clipPath(clip)
         val hi = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             shader = android.graphics.LinearGradient(0f, t, 0f, t + h * 0.42f,
-                withAlpha(0xFFFFFFFF.toInt(), (if (DARK) 0.14f else 0.28f) * strong), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+                withAlpha(0xFFFFFFFF.toInt(), (if (DARK) 0.16f else 0.30f) * strong), 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
         }
         cv.drawRect(rect, hi)
         val lo = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = android.graphics.LinearGradient(0f, t + h * 0.72f, 0f, t + h,
-                0x00000000, withAlpha(if (DARK) 0xFF000000.toInt() else mix(0xFF000000.toInt(), PAL.i(PAL.acc), 0.5f), (if (DARK) 0.20f else 0.07f) * strong),
+            shader = android.graphics.LinearGradient(0f, t + h * 0.70f, 0f, t + h,
+                0x00000000, withAlpha(if (DARK) 0xFF000000.toInt() else mix(0xFF000000.toInt(), PAL.i(PAL.acc), 0.5f), (if (DARK) 0.22f else 0.07f) * strong),
                 android.graphics.Shader.TileMode.CLAMP)
         }
         cv.drawRect(rect, lo)
-        // 亮边：描边一半在形状里
+        // 折射带 + 内发光：一圈圈往里画，越靠边越亮；上边（朝光）亮、下边弱
+        val bw = (if (band > 0f) band else minOf(w, h) / 2f * 0.62f).coerceAtMost(minOf(18f, minOf(w, h) / 2f))
+        val n = 8; val step = bw / n
+        val ring = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = step + 0.3f }
+        for (i in 0 until n) {
+            val inset = (i + 0.5f) * step
+            val tt = (1f - inset / bw).coerceIn(0f, 1f)
+            val bend = 1f - kotlin.math.sqrt(maxOf(1f - tt * tt, 0f))
+            val ig = kotlin.math.exp(-inset / maxOf(bw * 0.45f, 1f)) * glow * strong
+            val top = (bend * 0.28f * sp + ig).coerceIn(0f, 1f)
+            val bot = (bend * 0.06f * sp + ig).coerceIn(0f, 1f)
+            ring.shader = android.graphics.LinearGradient(0f, t, 0f, t + h,
+                withAlpha(-1, top), withAlpha(-1, bot), android.graphics.Shader.TileMode.CLAMP)
+            val rr = RectF(rect.left + inset, rect.top + inset, rect.right - inset, rect.bottom - inset)
+            val rad = maxOf(r - inset, 0f)
+            cv.drawRoundRect(rr, rad, rad, ring)
+        }
+        // 亮边：描边一半在形状里；左上朝光最亮、中段弱、右下内反光
         val rp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE; strokeWidth = rim * 2f
             shader = android.graphics.LinearGradient(l, t, l + w, t + h,
-                intArrayOf(withAlpha(-1, if (DARK) 0.62f else 0.92f), withAlpha(-1, if (DARK) 0.16f else 0.30f), withAlpha(-1, if (DARK) 0.10f else 0.18f)),
-                floatArrayOf(0f, 0.45f, 1f), android.graphics.Shader.TileMode.CLAMP)
+                intArrayOf(withAlpha(-1, (1.11f * sp).coerceAtMost(0.95f)), withAlpha(-1, 0.16f * sp), withAlpha(-1, (0.50f * sp).coerceAtMost(0.6f))),
+                floatArrayOf(0f, 0.5f, 1f), android.graphics.Shader.TileMode.CLAMP)
         }
         cv.drawRoundRect(rect, r, r, rp)
         cv.restore()
         // 外侧极淡的暗线，浅色壁纸上也看得出边
-        val hair = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 0.6f; color = withAlpha(0xFF000000.toInt(), if (DARK) 0.25f else 0.08f) }
+        val hair = Paint(Paint.ANTI_ALIAS_FLAG).apply { style = Paint.Style.STROKE; strokeWidth = 0.6f; color = withAlpha(0xFF000000.toInt(), if (DARK) 0.30f else 0.06f) }
         cv.drawRoundRect(rect, r, r, hair)
     }
+
+    /** 导航条选中水滴的颜色：深色白、浅色白微染主色 10%（MainActivity.BottomBar）。 */
+    private fun dropTone(): Int = if (DARK) 0xFFFFFFFF.toInt() else mix(0xFFFFFFFF.toInt(), PAL.i(PAL.acc), 0.10f)
+    /** 小玻璃块的底色：透明度 90 → 100 时走向水滴的颜色，拉满时和卡片底一样。 */
+    private fun innerTone(col: Int): Int = mix(col, dropTone(), WallTint.toBar(CLEAR))
 
     private fun withAlpha(c: Int, a: Float): Int = (((c ushr 24) * a.coerceIn(0f, 1f)).toInt() shl 24) or (c and 0x00FFFFFF)
     private fun mix(a: Int, b: Int, k: Float): Int {
@@ -310,8 +345,8 @@ object CourseWidgets {
         /** 小玻璃块（下一节、标签）：半透的底 + 顶部柔光 + 亮边。 */
         fun glass(l: Float, tp: Float, r: Float, bt: Float, rad: Float, col: Int, a: Float) {
             if (classic) { round(l, tp, r, bt, rad - 2f, col); return }
-            round(l, tp, r, bt, rad, CourseWidgets.withAlpha(col, a))
-            CourseWidgets.glassShine(cv, r - l, bt - tp, rad, 0.8f, l, tp, 0.8f)
+            round(l, tp, r, bt, rad, CourseWidgets.withAlpha(CourseWidgets.innerTone(col), a))
+            CourseWidgets.glassShine(cv, r - l, bt - tp, rad, 0.8f, l, tp, 1f, spec = 1.3f, glow = 0.12f)
         }
         fun round(l: Float, tp: Float, r: Float, bt: Float, rad: Float, col: Int) { p.style = Paint.Style.FILL; p.color = col; cv.drawRoundRect(RectF(l, tp, r, bt), rad, rad, p) }
         /** 画一行字，(x, top) 为左上角；align 0 左、1 居中、2 右；放不下就省略号。返回宽度。 */
@@ -405,7 +440,7 @@ object CourseWidgets {
         // 下一节
         n.next?.let { nx ->
             val ny = h - p - nextH
-            d.glass(L, ny, R, h - p, 14f, NEXT_BG, if (DARK) 0.55f else 0.5f)
+            d.glass(L, ny, R, h - p, 14f, NEXT_BG, WallTint.innerAlpha(CLEAR, DARK))
             val q = L + 11f
             val head = tr("下一节 {0}", hm(nx.from)) + (secText(c, nx)?.let { " · $it" } ?: "")
             d.text(head, q, ny + 6f, 10f, NEXT_FG, true, maxW = w * 0.55f)
@@ -439,7 +474,7 @@ object CourseWidgets {
         val ny = py + 9f
         val nb = h - p
         if (nb - ny < 26f) return
-        d.glass(L, ny, R, nb, 13f, NEXT_BG, if (DARK) 0.55f else 0.5f)
+        d.glass(L, ny, R, nb, 13f, NEXT_BG, WallTint.innerAlpha(CLEAR, DARK))
         val nx = n.next
         if (nx == null) { d.text(tr("这是今天最后一节"), (L + R) / 2, ny + (nb - ny) / 2 - 7f, 10f, NEXT_FG, true, 1); return }
         d.text(tr("下一节 {0}", hm(nx.from)) + (if (nx.room.isNotBlank()) " · " + nx.room else ""), L + 9f, ny + 5f, 9f, NEXT_FG, true, maxW = R - L - 18f)
@@ -490,11 +525,11 @@ object WidgetStyle {
     fun followWall(c: Context) = tint(c) == WALL
     fun setTint(c: Context, v: String) { p(c).edit().putString("tint", if (v == SKIN) SKIN else WALL).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
 
-    /** 玻璃透明度 0..90（%），默认 65。 */
+    /** 玻璃透明度 0..100（%），默认 65（build-21 起上限 100，拉满 = 导航条那么透）。 */
     const val CLEAR_DEFAULT = 65
-    fun clear(c: Context): Int = (try { p(c).getInt("clear", CLEAR_DEFAULT) } catch (x: ClassCastException) { CLEAR_DEFAULT }).coerceIn(0, 90)
+    fun clear(c: Context): Int = (try { p(c).getInt("clear", CLEAR_DEFAULT) } catch (x: ClassCastException) { CLEAR_DEFAULT }).coerceIn(0, WallTint.MAX)
     /** 改透明度：马上存、预览马上变；redraw = false 时先不重画桌面（拖动滑块中途），松手后再重画。 */
-    fun setClear(c: Context, v: Int, redraw: Boolean = true) { p(c).edit().putInt("clear", v.coerceIn(0, 90)).apply(); ver.value++; if (redraw) CourseWidgets.safeUpdate(c) }
+    fun setClear(c: Context, v: Int, redraw: Boolean = true) { p(c).edit().putInt("clear", v.coerceIn(0, WallTint.MAX)).apply(); ver.value++; if (redraw) CourseWidgets.safeUpdate(c) }
     val ver = androidx.compose.runtime.mutableStateOf(0)
 }
 
