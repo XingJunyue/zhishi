@@ -25,6 +25,9 @@ object TestHooks {
         if (i.getBooleanExtra("seed", false)) seed(c)
         i.getStringExtra("seedat")?.let { seedAt(c, it) }
         if (i.getBooleanExtra("oldformat", false)) oldFormat(c)
+        // 强制更新弹窗：假装查到了版本号 N 的新版（CI 上的版本号总是最新，平时永远弹不出来）
+        if (i.hasExtra("fakeneed")) c.getSharedPreferences("upd", Context.MODE_PRIVATE).edit()
+            .putInt("need", i.getIntExtra("fakeneed", 0)).putString("needNotes", "测试用的更新说明").putLong("checked", System.currentTimeMillis()).apply()
         i.getStringExtra("skin")?.let { Skins.setSkin(c, Skins.byId(it)) }
         if (i.hasExtra("mode")) Skins.setMode(c, i.getIntExtra("mode", 0))
         i.getStringExtra("wtint")?.let { WidgetStyle.setTint(c, it) }

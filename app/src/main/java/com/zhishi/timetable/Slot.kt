@@ -27,9 +27,12 @@ data class Slot(
         fun of(j: JSONObject): Slot {
             val d = j.optJSONArray("d") ?: JSONArray()
             val w = j.optJSONArray("w") ?: JSONArray()
-            return Slot(j.optString("id"), j.optString("n"), (0 until d.length()).map { d.getInt(it) }.toSet(),
-                j.optInt("f"), j.optInt("t"), j.optInt("l", 1), j.optString("s", ""), j.optString("k", "course"),
-                j.optString("r", ""), j.optString("te", ""), (0 until w.length()).map { w.getInt(it) }.toSet(), j.optInt("co", -1),
+            // 容错：星期 / 周次里混进非数字的、时间越界的都丢掉或夹到范围内（坏数据不能让启动崩）
+            val days = (0 until d.length()).mapNotNull { d.optInt(it, 0).takeIf { v -> v in 1..7 } }.toSet()
+            val weeks = (0 until w.length()).mapNotNull { w.optInt(it, 0).takeIf { v -> v in 1..60 } }.toSet()
+            return Slot(j.optString("id").ifBlank { "s" + j.optString("n").hashCode() + "_" + j.optInt("f") }, j.optString("n"), days,
+                j.optInt("f").coerceIn(0, 1439), j.optInt("t").coerceIn(0, 1439), j.optInt("l", 1).coerceIn(0, 2), j.optString("s", ""), j.optString("k", "course"),
+                j.optString("r", ""), j.optString("te", ""), weeks, j.optInt("co", -1),
                 j.optString("no", ""), j.optString("cr", ""))
         }
         val LEVELS = listOf(tr("水课"), tr("普通"), tr("重要"))

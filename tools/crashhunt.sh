@@ -34,6 +34,13 @@ adb uninstall $P > /dev/null 2>&1
 adb install -r -g "$APK" > /dev/null || { echo "[$TAG] install failed"; exit 1; }
 adb logcat -c; adb logcat -b crash -c 2>/dev/null
 echo "== crashhunt $TAG"
+# 强制更新弹窗（查到新版时每次启动都弹，平时 CI 上弹不出来）：带课冷启动、点「更新」、返回
+adb shell am start -n $P/.MainActivity --es seedat after > /dev/null; sleep 3
+adb shell am force-stop $P; adb shell am start -n $P/.MainActivity --ei fakeneed 9999 > /dev/null; sleep 2
+adb shell am force-stop $P; widgetStart; check update-cold 5; adb exec-out screencap -p > "shots/11-$TAG-update.png"
+tapAttr text 更新 && { check update-tap 3; adb exec-out screencap -p > "shots/11-$TAG-update-tap.png"; back; check update-back 3; }
+adb shell am force-stop $P; widgetStart; check update-cold2 5
+adb shell pm clear $P > /dev/null
 for mode in after before between ending offday tiny old none; do
   adb shell am force-stop $P
   if [ $mode = none ]; then adb shell pm clear $P > /dev/null; adb shell am start -n $P/.MainActivity --ez notour true > /dev/null; sleep 4
