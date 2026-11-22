@@ -95,7 +95,7 @@ fun Chip(text: String, warm: Boolean = false) {
         text, fontSize = 12.sp,
         color = if (warm) C.ClayDeep else C.SageInk,
         modifier = Modifier.padding(top = 8.dp, end = 6.dp)
-            .liquidGlass(CircleShape, tint = if (warm) C.Clay else C.Sage, fill = (if (warm) C.ClayPale else C.SagePale).copy(alpha = 0.55f), shadow = 0.dp, lens = LensSpec(chroma = 0.2f))
+            .liquidGlass(CircleShape, tint = if (warm) C.Clay else C.Sage, fill = (if (warm) C.ClayPale else C.SagePale).copy(alpha = 0.55f), shadow = 0.dp, lens = LensSpec(chroma = 0.08f))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     )
 }
@@ -106,7 +106,7 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean 
     Box(
         modifier.fillMaxWidth().height(52.dp)
             .glassButton(CircleShape, tint = C.Clay, fill = if (enabled) C.Clay.copy(alpha = 0.80f) else C.Track.copy(alpha = 0.6f), shadow = if (enabled) 8.dp else 0.dp,
-                enabled = enabled, lens = LensSpec(band = 16.dp, strength = 0.7f)) { onClick() },
+                enabled = enabled, lens = LensSpec(band = 16.dp, strength = 0.5f)) { onClick() },
         contentAlignment = Alignment.Center
     ) { Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp, color = if (enabled) C.OnClay else C.Faint,
         style = LocalTextStyle.current.copy(shadow = null)) }
@@ -115,7 +115,7 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean 
 /** 次要按钮：浅底主色字。 */
 @Composable
 fun GhostButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier.height(48.dp).glassButton(CircleShape, shadow = 4.dp, lens = LensSpec(band = 16.dp, strength = 0.7f)) { onClick() }.padding(horizontal = 18.dp),
+    Box(modifier.height(48.dp).glassButton(CircleShape, shadow = 4.dp, lens = LensSpec(band = 16.dp, strength = 0.5f)) { onClick() }.padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center) {
         Text(text, fontSize = 14.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold)
     }
@@ -158,7 +158,7 @@ fun Segments(options: List<String>, sel: Int, onSel: (Int) -> Unit) {
                     val st = (kotlin.math.abs(pos.velocity) * 0.09f).coerceAtMost(0.35f)
                     scaleX = 1f + st + 0.06f * press; scaleY = 1f - st * 0.25f + 0.06f * press
                 }
-                .liquidGlass(CircleShape, fill = C.Card.copy(alpha = if (C.dark) 0.40f else 0.62f), shadow = 2.dp, press = press, lens = LensSpec(chroma = 0.3f, glow = 0.12f)))
+                .liquidGlass(CircleShape, fill = C.Card.copy(alpha = if (C.dark) 0.40f else 0.62f), shadow = 2.dp, press = press, lens = LensSpec(chroma = 0.08f, glow = 0.12f)))
         }
         Row(Modifier.fillMaxWidth()) {
             options.forEachIndexed { i, t ->

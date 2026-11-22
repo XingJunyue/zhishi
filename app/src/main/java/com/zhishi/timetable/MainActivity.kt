@@ -176,7 +176,7 @@ private fun BottomBar(cur: String, m: Modifier, go: (String) -> Unit) {
         if (dark) Color.Black.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.95f), androidx.compose.ui.geometry.Offset(0f, 1f), 6f)
     val shape = CircleShape
     val barMod = if (lensOn) Modifier.liquidGlass(shape, fill = if (dark) Color.Black.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.08f), shadow = 10.dp,
-        lens = LensSpec(cover = true, band = 18.dp, strength = 0.75f, chroma = 0.35f, spec = 1.1f, glow = 0.08f,
+        lens = LensSpec(cover = true, band = 16.dp, strength = 0.38f, chroma = 0.07f, spec = 1.1f, glow = 0.08f,
             tint = if (dark) lerp(C.Card, C.Clay, 0.10f).copy(alpha = 0.12f) else lerp(Color.White, C.Clay, 0.08f).copy(alpha = 0.10f)), source = page)
         else Modifier.liquidGlass(shape, Glass.BAR, fill = Glass.bar(), shadow = 10.dp)
     BoxWithConstraints(m.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth().then(barMod).padding(horizontal = 6.dp, vertical = 6.dp)) {
@@ -191,7 +191,7 @@ private fun BottomBar(cur: String, m: Modifier, go: (String) -> Unit) {
                 }
                 .then(if (lensOn) Modifier.liquidGlass(shape, fill = if (dark) Color.White.copy(alpha = 0.10f) else lerp(Color.White, C.Clay, 0.10f).copy(alpha = 0.30f),
                     shadow = 3.dp, press = press,
-                    lens = LensSpec(cover = true, strength = 0.55f, chroma = 0.45f, mag = 0.10f, spec = 1.3f, glow = 0.12f), source = page)
+                    lens = LensSpec(cover = true, strength = 0.32f, chroma = 0.10f, mag = 0.06f, spec = 1.3f, glow = 0.12f), source = page)
                 else Modifier.liquidGlass(shape, fill = if (dark) Color.White.copy(alpha = 0.13f) else lerp(Color.White, C.Clay, 0.12f).copy(alpha = 0.85f), shadow = 0.dp, press = press)))
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {

@@ -197,8 +197,8 @@ half4 main(float2 xy) {
 class LensSpec(
     val cover: Boolean = false,        // 整块都画（导航条、水滴）还是只画边缘一圈（页面里的按钮）
     val band: Dp = 0.dp,               // 折射带宽，0 = 按尺寸自动
-    val strength: Float = 0.6f,        // 边缘位移 = 折射带宽 × strength
-    val chroma: Float = 0.3f,
+    val strength: Float = 0.45f,       // 边缘位移 = 折射带宽 × strength
+    val chroma: Float = 0.10f,         // 色散：build-14 实测 0.3+ 时字边出现明显的彩虹重影，压到 0.1 左右
     val mag: Float = 0f,
     val spec: Float = 1f,
     val glow: Float = 0.10f,
