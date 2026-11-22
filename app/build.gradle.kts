@@ -16,6 +16,8 @@ android {
         if (!project.hasProperty("allAbi")) ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         // 预览版（非 main 分支的 CI 构建传 -Ppreview）：完全关掉应用内更新，不查、不提示、不下载正式版
         buildConfigField("boolean", "PREVIEW", if (project.hasProperty("preview")) "true" else "false")
+        // 冒烟测试钩子（TestHooks）：debug 和 qa 打开，release 关
+        buildConfigField("boolean", "HOOKS", "false")
     }
     signingConfigs {
         create("rel") {
@@ -33,6 +35,19 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             signingConfig = signingConfigs.getByName("rel")
         }
+        debug { buildConfigField("boolean", "HOOKS", "true") }
+        // qa：和 release 一样经过 R8 混淆 / 优化（不可调试），但用调试签名、带测试钩子——冒烟测试用它在「混淆后的正式版代码」上跑崩溃排查
+        create("qa") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            buildConfigField("boolean", "HOOKS", "true")
+            matchingFallbacks += listOf("release")
+        }
+    }
+    sourceSets.getByName("qa") {
+        java.srcDir("src/debug/java")
+        assets.srcDir("src/debug/assets")
+        manifest.srcFile("src/debug/AndroidManifest.xml")
     }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
     kotlinOptions { jvmTarget = "17" }

@@ -475,7 +475,8 @@ object WidgetStyle {
     const val CLASSIC = "classic"
     val ALL = listOf(GLASS to "液态玻璃", CLASSIC to "经典")
     private fun p(c: Context) = c.getSharedPreferences("widget", Context.MODE_PRIVATE)
-    fun get(c: Context): String = norm(p(c).getString("style", null))
+    private fun str(c: Context, k: String): String? = try { p(c).getString(k, null) } catch (x: ClassCastException) { null }
+    fun get(c: Context): String = norm(str(c, "style"))
     fun norm(v: String?): String = if (v == CLASSIC) CLASSIC else GLASS
     fun classic(c: Context) = get(c) == CLASSIC
     /** 换样式：存下来并立刻重画所有小部件。 */
@@ -485,13 +486,13 @@ object WidgetStyle {
     const val WALL = "wall"
     const val SKIN = "skin"
     val TINTS = listOf(WALL to "跟随壁纸", SKIN to "跟随皮肤")
-    fun tint(c: Context): String = if (p(c).getString("tint", null) == SKIN) SKIN else WALL
+    fun tint(c: Context): String = if (str(c, "tint") == SKIN) SKIN else WALL
     fun followWall(c: Context) = tint(c) == WALL
     fun setTint(c: Context, v: String) { p(c).edit().putString("tint", if (v == SKIN) SKIN else WALL).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
 
     /** 玻璃透明度 0..90（%），默认 65。 */
     const val CLEAR_DEFAULT = 65
-    fun clear(c: Context): Int = p(c).getInt("clear", CLEAR_DEFAULT).coerceIn(0, 90)
+    fun clear(c: Context): Int = (try { p(c).getInt("clear", CLEAR_DEFAULT) } catch (x: ClassCastException) { CLEAR_DEFAULT }).coerceIn(0, 90)
     /** 改透明度：马上存、预览马上变；redraw = false 时先不重画桌面（拖动滑块中途），松手后再重画。 */
     fun setClear(c: Context, v: Int, redraw: Boolean = true) { p(c).edit().putInt("clear", v.coerceIn(0, 90)).apply(); ver.value++; if (redraw) CourseWidgets.safeUpdate(c) }
     val ver = androidx.compose.runtime.mutableStateOf(0)
@@ -500,15 +501,16 @@ object WidgetStyle {
 /** 到点重画小部件；改时间、改时区、更新安装后也重画。 */
 class WidgetTick : android.content.BroadcastReceiver() {
     companion object { const val ACTION = "com.zhishi.timetable.WIDGET_TICK" }
-    override fun onReceive(c: Context, i: Intent) { CourseWidgets.update(c, force = i.action != ACTION) }
+    // 广播里抛异常会直接杀掉整个进程（App 开着时就是「闪退」），所以这里必须兜住
+    override fun onReceive(c: Context, i: Intent) { try { CourseWidgets.update(c, force = i.action != ACTION) } catch (x: Throwable) { android.util.Log.w("Zhishi", "小部件重画失败", x) } }
 }
 
 class CourseWidget4 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.update(c)
-    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.update(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
+    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
 }
 
 class CourseWidget2 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.update(c)
-    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.update(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
+    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
 }

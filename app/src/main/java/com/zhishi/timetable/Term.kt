@@ -18,7 +18,8 @@ object Term {
         memo[raw]?.let { return it }
         val a = try { JSONArray(raw) } catch (x: Exception) { JSONArray() }
         if (memo.size > 8) memo.clear()
-        return (0 until a.length()).map { Slot.of(a.getJSONObject(it)) }.also { memo[raw] = it }
+        // 一条坏掉的（老版本 / 被改坏的数据）只跳过它，不让整张课表、小部件和启动跟着崩
+        return (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { try { Slot.of(it) } catch (x: Exception) { null } } }.also { memo[raw] = it }
     }
     private fun put(c: Context, key: String, l: List<Slot>) {
         val a = JSONArray(); l.forEach { a.put(it.json()) }
@@ -42,9 +43,9 @@ object Term {
 
     // ---------- 周次 ----------
     /** 第 1 周周一（epoch 天）；-1 = 没设，所有课按每周都上。 */
-    fun termStart(c: Context) = p(c).getLong("term", -1L)
+    fun termStart(c: Context) = try { p(c).getLong("term", -1L) } catch (x: ClassCastException) { -1L }
     fun setTermStart(c: Context, day: Long) { p(c).edit().putLong("term", day).apply(); CourseWidgets.safeUpdate(c) }
-    fun totalWeeks(c: Context) = p(c).getInt("weeks", 20)
+    fun totalWeeks(c: Context) = safeInt(c, "weeks", 20).coerceIn(1, 60)
     fun setTotalWeeks(c: Context, n: Int) = p(c).edit().putInt("weeks", n.coerceIn(1, 30)).apply()
     fun showOff(c: Context) = p(c).getBoolean("showOff", true)
     fun setShowOff(c: Context, v: Boolean) = p(c).edit().putBoolean("showOff", v).apply()
@@ -69,14 +70,17 @@ object Term {
 
     // ---------- 每节课的时间 ----------
     private val DEFAULT_SEC = listOf(480, 535, 600, 655, 840, 895, 960, 1015, 1140, 1195, 1250, 1305)
-    fun secStarts(c: Context): List<Int> = (p(c).getString("secs", null)?.split(',')?.mapNotNull { it.toIntOrNull() } ?: DEFAULT_SEC).ifEmpty { DEFAULT_SEC }
+    fun secStarts(c: Context): List<Int> = ((try { p(c).getString("secs", null) } catch (x: ClassCastException) { null })
+        ?.split(',')?.mapNotNull { it.trim().toIntOrNull()?.takeIf { v -> v in 0..1439 } } ?: DEFAULT_SEC).ifEmpty { DEFAULT_SEC }
     fun setSecStarts(c: Context, l: List<Int>) = p(c).edit().putString("secs", l.joinToString(",")).apply()
-    fun secLen(c: Context) = p(c).getInt("secLen", 45)
+    fun secLen(c: Context) = safeInt(c, "secLen", 45).coerceIn(5, 300)
+    /** 读 int：类型不对（老版本存成了别的类型）就当没存。 */
+    private fun safeInt(c: Context, k: String, def: Int) = try { p(c).getInt(k, def) } catch (x: ClassCastException) { def }
     fun setSecLen(c: Context, m: Int) = p(c).edit().putInt("secLen", m).apply()
     /** 每节下课时间：单独改过的用改过的，没改过的 = 上课时间 + 每节时长。 */
     fun secEnds(c: Context): List<Int> {
         val st = secStarts(c); val len = secLen(c)
-        val saved = p(c).getString("secE", null)?.split(',')?.map { it.toIntOrNull() } ?: emptyList()
+        val saved = (try { p(c).getString("secE", null) } catch (x: ClassCastException) { null })?.split(',')?.map { it.trim().toIntOrNull() } ?: emptyList()
         return st.indices.map { i -> saved.getOrNull(i)?.takeIf { it > st[i] } ?: (st[i] + len) }
     }
     fun setSecEnds(c: Context, l: List<Int>) = p(c).edit().putString("secE", l.joinToString(",")).apply()

@@ -254,7 +254,9 @@ object TodoAlarm {
 
 /** 闹钟到了：发通知；开机 / 更新后：把提醒重新排上。 */
 class TodoReminder : BroadcastReceiver() {
-    override fun onReceive(c: Context, i: Intent) {
+    // 广播里抛异常会杀掉整个进程：兜住
+    override fun onReceive(c: Context, i: Intent) { try { handle(c, i) } catch (x: Throwable) { android.util.Log.w("Zhishi", "待办提醒失败", x) } }
+    private fun handle(c: Context, i: Intent) {
         when (i.action) {
             // 改时间 / 改时区：全天待办的提醒（当天 8:00）按新时区重排
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> { TodoAlarm.rescheduleAll(c); return }

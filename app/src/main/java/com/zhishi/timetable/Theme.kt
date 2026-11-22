@@ -83,11 +83,14 @@ object Skins {
     val sysDarkState = mutableStateOf(false)
 
     fun init(c: Context) {
-        skinState.value = byId(p(c).getString("skin", null))
-        modeState.value = p(c).getInt("mode", 0).coerceIn(0, 2)
+        skinState.value = byId(str(c, "skin"))
+        modeState.value = mode(c)
         sysDarkState.value = sysDark(c)
     }
     fun byId(id: String?) = ALL.firstOrNull { it.id == id } ?: ALL[0]
+    /** 容错读法：类型不对 / 越界都退回默认（升级来的老数据不能让启动崩）。 */
+    private fun str(c: Context, k: String): String? = try { p(c).getString(k, null) } catch (x: ClassCastException) { null }
+    private fun mode(c: Context): Int = (try { p(c).getInt("mode", 0) } catch (x: ClassCastException) { 0 }).let { if (it in 0..2) it else 0 }
     fun sysDark(c: Context) = (c.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
     fun setSkin(c: Context, s: Skin) { p(c).edit().putString("skin", s.id).apply(); skinState.value = s; CourseWidgets.safeUpdate(c) }
@@ -98,8 +101,8 @@ object Skins {
 
     /** 小部件用：不依赖 Compose，直接读存储和系统深色设置。 */
     fun palFor(c: Context): Pal {
-        val s = byId(p(c).getString("skin", null))
-        return if (darkFor(p(c).getInt("mode", 0), sysDark(c))) s.dark else s.light
+        val s = byId(str(c, "skin"))
+        return if (darkFor(mode(c), sysDark(c))) s.dark else s.light
     }
 }
 

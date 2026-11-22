@@ -496,27 +496,36 @@ private fun NowStrip(courses: List<Slot>, week: Int?, pal: Map<String, Pair<Colo
             .then(if (s != null) Modifier.clickable { onOpen(s, d) } else Modifier).padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        if (s == null) {
-            Text("✓", fontSize = 14.sp, color = C.SageInk, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 10.dp))
-            Text(tr("今天的课上完啦"), fontSize = 13.sp, color = C.Soft)
-            return@Row
-        }
-        val (bg, fg) = courseTone(colorOf(s, pal), C.dark, C.Card)
-        if (n.live) {
-            val t = rememberInfiniteTransition(label = "live")
-            val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(1100), RepeatMode.Reverse), label = "a")
-            Box(Modifier.size(9.dp).clip(CircleShape).background(C.Clay.copy(alpha = a)))
-        } else Box(Modifier.size(9.dp).clip(CircleShape).background(bg))
-        Column(Modifier.weight(1f).padding(start = 10.dp)) {
-            Text(if (n.live) tr("正在上") + " · " + Term.clock(s.from) + "–" + Term.clock(s.to) else tr("下一节") + " · " + Term.clock(s.from),
-                fontSize = 11.sp, color = C.Faint, maxLines = 1)
-            Text(s.name + if (s.room.isNotBlank()) "  @" + s.room else "", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
-        }
-        val left = if (n.live) s.to - m else s.from - m
-        val txt = if (n.live) tr("还剩 {0} 分钟", left) else if (left >= 60) tr("{0} 小时后", (left + 30) / 60) else tr("{0} 分钟后", left.coerceAtLeast(1))
-        Text(txt, fontSize = 12.sp, color = if (n.live) C.OnClay else fg, fontWeight = FontWeight.SemiBold, maxLines = 1,
-            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (n.live) C.Clay else bg).padding(horizontal = 9.dp, vertical = 4.dp))
+        // 不要在 Row / Column / Box 这类 inline 布局的内容里用带标签的 return 提前返回：Compose 编译器 1.5.x + 运行时 1.7（BOM 2024.09）
+        // 下会让组栈错位，首帧组合直接 ArrayIndexOutOfBoundsException（IntStack.peek2 / ComposerImpl.endRoot）——
+        // build-15/16 「今天的课都上完后」打开 App / 导入课表后回到课表页就闪退、清数据前一直崩，就是这一句。拆成独立的 composable。
+        if (s == null) DoneToday() else NextOrLive(s, n.live, m, pal)
     }
+}
+
+@Composable
+private fun DoneToday() {
+    Text("✓", fontSize = 14.sp, color = C.SageInk, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 10.dp))
+    Text(tr("今天的课上完啦"), fontSize = 13.sp, color = C.Soft)
+}
+
+@Composable
+private fun androidx.compose.foundation.layout.RowScope.NextOrLive(s: Slot, live: Boolean, m: Int, pal: Map<String, Pair<Color, Color>>) {
+    val (bg, fg) = courseTone(colorOf(s, pal), C.dark, C.Card)
+    if (live) {
+        val t = rememberInfiniteTransition(label = "live")
+        val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(1100), RepeatMode.Reverse), label = "a")
+        Box(Modifier.size(9.dp).clip(CircleShape).background(C.Clay.copy(alpha = a)))
+    } else Box(Modifier.size(9.dp).clip(CircleShape).background(bg))
+    Column(Modifier.weight(1f).padding(start = 10.dp)) {
+        Text(if (live) tr("正在上") + " · " + Term.clock(s.from) + "–" + Term.clock(s.to) else tr("下一节") + " · " + Term.clock(s.from),
+            fontSize = 11.sp, color = C.Faint, maxLines = 1)
+        Text(s.name + if (s.room.isNotBlank()) "  @" + s.room else "", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    }
+    val left = if (live) s.to - m else s.from - m
+    val txt = if (live) tr("还剩 {0} 分钟", left) else if (left >= 60) tr("{0} 小时后", (left + 30) / 60) else tr("{0} 分钟后", left.coerceAtLeast(1))
+    Text(txt, fontSize = 12.sp, color = if (live) C.OnClay else fg, fontWeight = FontWeight.SemiBold, maxLines = 1,
+        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (live) C.Clay else bg).padding(horizontal = 9.dp, vertical = 4.dp))
 }
 
 // ---------------- 一周的格子 ----------------

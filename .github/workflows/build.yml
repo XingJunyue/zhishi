@@ -8,6 +8,7 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     env:
       # 非 main 分支 = 预览包：-Ppreview 让 BuildConfig.PREVIEW=true，应用内更新器整个关掉。main 不带，更新器照旧。
       PV: ${{ github.ref != 'refs/heads/main' && '-Ppreview' || '' }}
@@ -35,8 +36,9 @@ jobs:
           cp app/build/outputs/apk/release/app-release.apk out/zhishi-1.${{ github.run_number }}.apk
       - name: Build test apks (with x86 libs for the emulator)
         run: |
-          gradle :app:assembleDebug :app:assembleRelease -PallAbi $PV --no-daemon
+          gradle :app:assembleDebug :app:assembleRelease :app:assembleQa -PallAbi $PV --no-daemon
           cp app/build/outputs/apk/debug/app-debug.apk out/test-debug.apk
+          cp app/build/outputs/apk/qa/app-qa.apk out/test-qa.apk
           cp app/build/outputs/apk/release/app-release.apk out/test-release.apk
       - name: Upload unit test report
         if: failure()
@@ -48,6 +50,7 @@ jobs:
   emulator:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4

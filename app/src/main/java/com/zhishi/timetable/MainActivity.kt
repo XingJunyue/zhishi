@@ -57,7 +57,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
         Skins.init(this)
         super.onCreate(b)
-        if (BuildConfig.DEBUG) TestHooks.run(this, intent)
+        if (BuildConfig.HOOKS) TestHooks.run(this, intent)
         Tour.init(this)
         TodoAlarm.rescheduleAll(this)
         setContent {
@@ -76,7 +76,7 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(i: Intent) {
         super.onNewIntent(i)
         setIntent(i)
-        if (BuildConfig.DEBUG) TestHooks.run(this, i)
+        if (BuildConfig.HOOKS) TestHooks.run(this, i)
         i.getStringExtra("open")?.let { Nav.open.value = it }
     }
 

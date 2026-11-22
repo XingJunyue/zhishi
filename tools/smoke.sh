@@ -212,5 +212,7 @@ adb shell am start -n $P/.MainActivity --es open widget; shot 05-release-widget 
 if crashed; then echo "CRASH (release)"; adb logcat -d -b crash | tee shots/crash-release.txt; fail=1; fi
 
 adb logcat -d > shots/logcat.txt
+# 崩溃排查（build-17）：混淆后的 qa 包上按各种时刻 / 老数据 / 强制更新弹窗冷启动、走两个导入入口
+QUICK=1 bash tools/crashhunt.sh out/test-qa.apk qa || fail=1
 echo "smoke fail=$fail"
 exit $fail

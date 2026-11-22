@@ -14,7 +14,7 @@
 - 课表页顶部：大号粗体「第N周」+「周一 11.21」，右上角「＋」（添加课程和所有导入，底部弹出）和日历图标（学期与显示）。下面一周日期条，今天是柔和的圆角胶囊；左边时间列是每节的上 / 下课时间 + 细虚线时间轴；课块是半透明的柔和色块，没有粗边框和阴影。
 - 字体：全部系统无衬线（`Serif` 现在就是默认字体，名字保留免得到处改）。
 - 液态玻璃（2026-11-22，用户要的 iOS 26 Liquid Glass 风格）：清透、带水光，**不要模糊 / 毛玻璃**。统一用 `Glass.kt` 的 `Modifier.liquidGlass(shape, level, tint, fill, shadow)`：很透的底（浅色白 ~16%、深色 ~10%，按皮肤主色轻染）+ 左上亮右下淡的细亮边 + 顶部柔光 + 底边暗边 + 只画在形状外的轻投影，内容按形状裁剪（调用处不用再 clip）。`level` 0 = 清透（卡片、按钮、课块），`Glass.THICK` = 底部弹出 / 对话框 / 盖在网页上的条（~98.5% 不透明：实测 94% / 97% 时后面列表的深色字仍有看得出的残影）。导航条的底用 `Glass.bar()`（皮肤卡片色，深色 ~90%、浅色 ~80%，没选中的字用 `C.Soft`），输入框底用 `Glass.field()`（~96%）。`GlassSheet` 的遮罩加重（黑 浅色 45% / 深色 58%）。底部弹出一律用 `GlassSheet`，对话框 `containerColor = Transparent, tonalElevation = 0.dp, shape = DialogShape, modifier = dialogGlass()`。字统一带一圈很淡的光晕（`ZhishiTheme` 里的 `LocalTextStyle` shadow，浅色白、深色黑），主色实底按钮上的字去掉光晕。
-- 真·液态玻璃（build-14，用户要「水灵、灵动」的 iOS 26 效果）：Compose BOM 2024.09.03（Compose 1.7，需要 `GraphicsLayer`）。`App` 把整页（插画 + 页面）录进 `LocalGlassPage`、只录插画进 `LocalGlassArt`（`Modifier.glassSource`）。`liquidGlass(lens = LensSpec(...))` 在 API 33+ 用 AGSL `RuntimeShader`（`GlassLens.SRC`）把后面的内容重新画一遍：边缘折射、轻微色散、跟着左上光的亮边、内发光，中间平、不模糊。`cover = true` = 整块都画（导航条、选中水滴，折射 `LocalGlassPage`），否则只画边缘一圈（页面里的按钮，折射插画——页面里的东西不能折射整页，会自己画自己）。不同窗口（底部弹出、对话框）里自动不走透镜。着色器编译 / 绘制失败记 `ZhishiGlass` 日志并永久退回老画法；API < 33 也是老画法。所有按钮 / 小标签用 `Modifier.glassButton`（透镜 + 按下像水滴鼓起变亮的弹簧，无涟漪）；`Segments` 和底部导航的选中项是会滑动、拉伸、回弹的玻璃水滴。卡片不开透镜（滚动性能），底 12% / 8%。
+- 真·液态玻璃（build-14，用户要「水灵、灵动」的 iOS 26 效果）：Compose BOM 2024.09.03（Compose 1.7，需要 `GraphicsLayer`）。`App` 把整页（插画 + 页面）录进 `LocalGlassPage`、只录插画进 `LocalGlassArt`（`Modifier.glassSource`）。`liquidGlass(lens = LensSpec(...))` 在 API 33+ 用 AGSL `RuntimeShader`（`GlassLens.SRC`）把后面的内容重新画一遍：边缘折射、轻微色散、跟着左上光的亮边、内发光，中间平、不模糊。`cover = true` = 整块都画（导航条、选中水滴，折射 `LocalGlassPage`），否则只画边缘一圈（页面里的按钮，折射插画——页面里的东西不能折射整页，会自己画自己）。不同窗口（底部弹出、对话框）里自动不走透镜。着色器编译 / 设参数 / 绘制 / 录制失败一次（`GlassLens.fail`）就记 `ZhishiGlass` 日志、本进程立刻关透镜，并写进 SharedPreferences `glass` 的 `off`（= 当时的 versionCode），以后每次启动都走老画法，装新版本才再试；API < 33 也是老画法。所有按钮 / 小标签用 `Modifier.glassButton`（透镜 + 按下像水滴鼓起变亮的弹簧，无涟漪）；`Segments` 和底部导航的选中项是会滑动、拉伸、回弹的玻璃水滴。卡片不开透镜（滚动性能），底 12% / 8%。
 - 小部件两种样式（`WidgetStyle`，SharedPreferences `widget` 的 `style`）：液态玻璃（默认）/ 经典（build-9 那种实心皮肤底 + 淡插画，代码路径是 `CLASSIC`，别删）。「我的 → 桌面小部件」里切换，切了立刻重画。位图按真实 dp × 密度画（`bitmapSize`，API 31+ 用 `OPTION_APPWIDGET_SIZES`），字不加模糊光晕。
 - 课表页的「导入课表」菜单：`Nav.sub` 处理完置 `Nav.NONE`（以前停在 8，每次切回课表页都重新弹）。只有课表空、从没有过课（`ImportPrompt`，SharedPreferences `table` 的 `imported`，`Term.setDesired` 有课就记上）时，每次启动最多自动弹一次。
 - 整屏流程（教务导入等）调用 `HideBottomBar()`：打开期间底部导航条收起，免得盖住页面底部按钮。新加整屏页面也要这样。
@@ -72,10 +72,14 @@
 - 第三方参考只用 MIT / Apache-2.0 代码并保留署名（THIRD_PARTY_NOTICES.md 以及 `Jw.kt`/`JwAdapters.kt` 文件头）；不要复制 GPL 项目代码。
 - 开学日期不从教务读取，导入后让用户确认。
 
-## 冒烟测试钩子（只在 debug 版，`TestHooks.kt`）
+## 冒烟测试钩子（debug 和 qa 版，`TestHooks.kt`）
+- 钩子由 `BuildConfig.HOOKS` 开关（debug、qa 为 true，release 为 false），不要再用 `BuildConfig.DEBUG` 判断。
+- `qa` 构建类型：`initWith(release)`——和正式版一样 R8 混淆 / 资源压缩，但用调试签名、带测试钩子（源码用 `src/debug`）。`build.yml` 每次都打 `out/test-qa.apk`，冒烟测试最后跑 `QUICK=1 tools/crashhunt.sh`（今天的课上完 / 正好下课 / 老数据 / 空，冷启动两次 + 两个导入入口）。混淆相关的崩溃只有在 qa / release 上才看得到。
+- `tools/crashhunt.sh` 完整版（8 种时刻 + 8 种导入方式 + 强制更新弹窗）用 `.github/workflows/crashhunt.yml`，**只手动触发**（workflow_dispatch），产物 artifact `hunt`（`crashhunt-<标签>.txt` 里是 FATAL EXCEPTION 堆栈）。模拟器是英文系统，脚本先 `--es setlang zh`（会让进程自己退出重启，单独一步）。`--es seedat after|before|between|ending|offday|tiny` 按「现在」造课表，`--ez oldformat true` 写坏的老格式数据，`--ei fakeneed N` 假装查到新版。所有 workflow job 都有 `timeout-minutes`。
 - `--ez notodos true` 清空待办（截空状态）；`--es wtint wall|skin`、`--ei wclear N` 小部件玻璃颜色 / 透明度；`--es wallpaper dark|light` 换模拟器壁纸（调试版 manifest 才有 SET_WALLPAPER）。
 - `--ez seed true` 放示例课程（含一节「正在上」的课）和几条示例待办；`--es setlang zh|en|…` 换语言；`--es skin <id> --ei mode 0|1|2` 换皮肤；`--es open table:N|todo:N|calendar|settings:N|me|widget|about` 打开页面（`todo:1` 新建待办、`todo:2` 编辑第一条）（`table:1` 教务导入、`table:2` 学期、`table:3` 加课、`table:4` 改课、`table:5` 开学日期、`table:7` 每节时间、`table:8` 导入菜单）；`--es jwkind/jwurl --ez jwauto` 网页导入；`--es jwq` 预填学校搜索；`--es ocr <文件>` 识别截图。
 
 ## 工作习惯
+- **Compose：不要在 Row / Column / Box 等 inline 布局的内容 lambda 里用 `return@Row` 这类带标签的 return 提前返回。** 现在是 Kotlin 1.9.22 + Compose 编译器 1.5.8 + 运行时 1.7（BOM 2024.09.03），这种写法会让组栈错位，首帧组合 `ArrayIndexOutOfBoundsException`（`IntStack.peek2` / `ComposerImpl.endRoot`）。build-15/16 「今天的课上完后」打开 App / 点小部件 / 导入课表后回课表页一直闪退就是 `NowStrip` 里的一句 `return@Row`（build-17 修）。用 if / else 或拆成小 composable；`RobustnessTest.noEarlyReturnFromInlineLayouts` 会扫源码。
 - 声称完成前先让 CI 绿、看冒烟截图。
 - 没验证过的功能不说已完成。
