@@ -78,6 +78,16 @@ for mode in 1 2; do
 done
 adb shell am start -n $P/.MainActivity --es skin chunyu --ei mode 1 > /dev/null
 go table:0; sleep 1
+# 小部件样式：切到「经典」截一张，再切回「液态玻璃」
+go widget; sleep 3; tapText 经典; shot 09-widget-classic 3
+adb shell am start -n $P/.MainActivity --es skin yehang --ei mode 2 > /dev/null; go widget; shot 09-widget-classic-yehang-dark 3
+tapText 液态玻璃; sleep 2
+adb shell am start -n $P/.MainActivity --es skin chunyu --ei mode 1 > /dev/null
+# 从「我的」点「导入课表」后再回课表页：导入菜单不应该再弹出来（build-13 的问题）
+go table:8; sleep 3; adb shell input keyevent KEYCODE_BACK; sleep 1; tapText 待办; sleep 2; tapText 课表; shot 09-table-no-reimport 3
+# 液态玻璃透镜：着色器编译 / 绘制失败会记在 ZhishiGlass
+adb logcat -d -s ZhishiGlass > shots/glass.txt; cat shots/glass.txt | tail -5
+go table:0; sleep 1
 
 # 应用图标：回桌面，打开应用列表
 adb shell input keyevent KEYCODE_HOME; sleep 2

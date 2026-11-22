@@ -89,7 +89,7 @@ object CourseWidgets {
         if (big.isEmpty() && small.isEmpty()) { schedule(c, emptyList(), false); return }
         val list = today(c)
         schedule(c, list, true)
-        val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.desired(c).hashCode()}|${Term.widgetLevel(c)}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
+        val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.desired(c).hashCode()}|${Term.widgetLevel(c)}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
         if (!force && sig == lastSig) return
         lastSig = sig
         val now = plan(list, Term.nowMin())
@@ -119,6 +119,7 @@ object CourseWidgets {
     private var NEXT_BG = 0
     private var NEXT_FG = 0
     private var DARK = false
+    private var CLASSIC = false
     private lateinit var PAL: Pal
     private fun usePal(c: Context) {
         val p = Skins.palFor(c); PAL = p; DARK = p.dark
@@ -143,24 +144,33 @@ object CourseWidgets {
     private fun draw(c: Context, wide: Boolean, o: Bundle?, now: Now, all: List<Slot>): Bitmap {
         usePal(c)
         val dm = c.resources.displayMetrics
-        // 竖屏时桌面给的是 minWidth × maxHeight
-        var wDp = (o?.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH) ?: 0).toFloat()
-        var hDp = (o?.getInt(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT) ?: 0).toFloat()
-        if (wDp < 60f) wDp = if (wide) 320f else 156f
-        if (hDp < 60f) hDp = 156f
+        val (wDp, hDp) = sizeDp(c, o, wide)
         // 设计稿：4×2 是 320×156dp，2×2 是 156×156dp；实际尺寸不同就整体等比缩放，空白处往四周铺开
         val k = minOf(wDp / (if (wide) 320f else 156f), hDp / 156f).coerceIn(0.72f, 1.35f)
         val lw = wDp / k; val lh = hDp / k
-        val px = (dm.density.coerceAtMost(2.75f)) * k
-        val b = Bitmap.createBitmap((lw * px).toInt().coerceAtLeast(1), (lh * px).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
-        val cv = Canvas(b); cv.scale(px, px)
+        // 按真实尺寸 × 屏幕密度画（以前密度封顶 2.75，桌面再放大一次，字就糊了），一像素对一像素
+        val (bw, bh, scale) = bitmapSize(wDp, hDp, dm.density, dm.widthPixels.toLong() * dm.heightPixels)
+        val b = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+        b.density = dm.densityDpi
+        // 画布单位 = 设计稿 dp（lw × lh），铺满整张位图
+        val cv = Canvas(b); cv.scale(scale * k, scale * k)
         val d = D(cv)
         val free = now.main == null
-        d.halo = if (DARK) 0x99000000.toInt() else 0xBFFFFFFF.toInt()
-        // 液态玻璃底：很透的皮肤底色（桌面壁纸透出来），淡淡一层插画，顶部水光、底边暗边、左上亮右下淡的亮边。不模糊。
-        glassCard(cv, lw, lh)
-        faintArt(c, cv, lw, lh)
-        glassShine(cv, lw, lh, R_CARD, 1.2f)
+        CLASSIC = WidgetStyle.classic(c)
+        d.classic = CLASSIC
+        if (CLASSIC) {
+            // 经典样式（改成液态玻璃之前、build-9 的样子）：实心的皮肤底色 + 淡插画，字不加任何阴影
+            d.halo = 0
+            d.round(0f, 0f, lw, lh, 22f, if (free) FREE_BG else CREAM)
+            faintArt(c, cv, lw, lh)
+        } else {
+            // 不再给字加模糊的光晕（会让字发虚）：浅色不加，深色只加一道很细的暗影
+            d.halo = if (DARK) 0x73000000 else 0
+            // 液态玻璃底：皮肤底色（桌面壁纸透出来），淡淡一层插画，顶部水光、底边暗边、左上亮右下淡的亮边。不模糊。
+            glassCard(cv, lw, lh)
+            faintArt(c, cv, lw, lh)
+            glassShine(cv, lw, lh, R_CARD, 1.4f)
+        }
         when {
             free -> freeCard(d, lw, lh, wide, now.doneAll)
             wide -> wideCard(c, d, lw, lh, now, all)
@@ -185,20 +195,62 @@ object CourseWidgets {
     private fun faintArt(c: Context, cv: Canvas, lw: Float, lh: Float) {
         val a = art(c) ?: return
         val srcH = (a.width * lh / lw).toInt().coerceIn(1, a.height)
-        val clip = Path().apply { addRoundRect(RectF(0f, 0f, lw, lh), R_CARD, R_CARD, Path.Direction.CW) }
+        val r = if (CLASSIC) 22f else R_CARD
+        val clip = Path().apply { addRoundRect(RectF(0f, 0f, lw, lh), r, r, Path.Direction.CW) }
         cv.save(); cv.clipPath(clip)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = if (DARK) 64 else 56 }
+        val p = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG).apply { alpha = if (CLASSIC) (if (DARK) 120 else 110) else (if (DARK) 40 else 36) }
         cv.drawBitmap(a, android.graphics.Rect(0, 0, a.width, srcH), RectF(0f, 0f, lw, lh), p)
         cv.restore()
     }
 
     private const val R_CARD = 26f
 
-    /** 卡片的玻璃底色：皮肤底色，浅色 ~34%、深色 ~44% 不透明，往主色偏一点点。 */
+    /**
+     * 卡片的玻璃底色：皮肤底色，浅色 ~52%、深色 ~62% 不透明（build-13 是 34% / 44%，花壁纸上字看不清），往主色偏一点点；
+     * 左边放字的区域再从左往右叠一层淡淡的同色（左 +18% → 右 0），字底更干净，右边插画照样透。
+     */
     private fun glassCard(cv: Canvas, w: Float, h: Float) {
         val fill = mix(PAL.i(PAL.bg), PAL.i(PAL.acc), 0.06f)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(fill, if (DARK) 0.44f else 0.34f) }
-        cv.drawRoundRect(RectF(0f, 0f, w, h), R_CARD, R_CARD, p)
+        val rect = RectF(0f, 0f, w, h)
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(fill, if (DARK) 0.62f else 0.52f) }
+        cv.drawRoundRect(rect, R_CARD, R_CARD, p)
+        val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+            shader = android.graphics.LinearGradient(0f, 0f, w * 0.75f, 0f, withAlpha(fill, 0.18f), withAlpha(fill, 0f), android.graphics.Shader.TileMode.CLAMP)
+        }
+        cv.drawRoundRect(rect, R_CARD, R_CARD, plate)
+    }
+
+    /** 小部件实际的尺寸（dp）：API 31+ 用桌面给的确切尺寸列表，按当前横竖屏挑；否则竖屏 minWidth × maxHeight、横屏 maxWidth × minHeight。 */
+    private fun sizeDp(c: Context, o: Bundle?, wide: Boolean): Pair<Float, Float> {
+        val land = c.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        var wDp = 0f; var hDp = 0f
+        if (o != null && android.os.Build.VERSION.SDK_INT >= 31) {
+            @Suppress("DEPRECATION")
+            val sizes = o.getParcelableArrayList<android.util.SizeF>(AppWidgetManager.OPTION_APPWIDGET_SIZES)
+            if (!sizes.isNullOrEmpty()) {
+                val pick = if (land) sizes.maxByOrNull { it.width } else sizes.minByOrNull { it.width }
+                if (pick != null) { wDp = pick.width; hDp = pick.height }
+            }
+        }
+        if (o != null && (wDp < 60f || hDp < 60f)) {
+            wDp = o.getInt(if (land) AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH else AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH).toFloat()
+            hDp = o.getInt(if (land) AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT else AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT).toFloat()
+        }
+        if (wDp < 60f) wDp = if (wide) 320f else 156f
+        if (hDp < 60f) hDp = 156f
+        return wDp to hDp
+    }
+
+    /**
+     * 位图尺寸（纯函数，单测）：dp × 密度，一像素对一像素；超过 RemoteViews 的位图内存上限（屏幕像素 × 4 字节 × 1.5）的
+     * 一半时才等比缩小（留一半给另一个小部件）。返回 宽、高、dp → 像素的比例。
+     */
+    fun bitmapSize(wDp: Float, hDp: Float, density: Float, screenPx: Long): Triple<Int, Int, Float> {
+        var s = density
+        val budget = (screenPx * 1.5 / 2).coerceAtLeast(200_000.0)      // 像素数
+        val need = wDp * s * hDp * s
+        if (need > budget) s *= kotlin.math.sqrt(budget / need).toFloat()
+        return Triple((wDp * s).toInt().coerceAtLeast(1), (hDp * s).toInt().coerceAtLeast(1), s)
     }
 
     /** 玻璃的光：顶部柔光（白 ~28% → 0，42% 高度内）、底边一点暗边（折射）、渐变亮边（左上亮 → 右下淡）。 */
@@ -221,7 +273,7 @@ object CourseWidgets {
         val rp = Paint(Paint.ANTI_ALIAS_FLAG).apply {
             style = Paint.Style.STROKE; strokeWidth = rim * 2f
             shader = android.graphics.LinearGradient(l, t, l + w, t + h,
-                intArrayOf(withAlpha(-1, if (DARK) 0.45f else 0.78f), withAlpha(-1, if (DARK) 0.10f else 0.24f), withAlpha(-1, if (DARK) 0.06f else 0.12f)),
+                intArrayOf(withAlpha(-1, if (DARK) 0.62f else 0.92f), withAlpha(-1, if (DARK) 0.16f else 0.30f), withAlpha(-1, if (DARK) 0.10f else 0.18f)),
                 floatArrayOf(0f, 0.45f, 1f), android.graphics.Shader.TileMode.CLAMP)
         }
         cv.drawRoundRect(rect, r, r, rp)
@@ -239,11 +291,14 @@ object CourseWidgets {
 
     private class D(val cv: Canvas) {
         val p = Paint(Paint.ANTI_ALIAS_FLAG)
-        val t = TextPaint(Paint.ANTI_ALIAS_FLAG)
+        val t = TextPaint(Paint.ANTI_ALIAS_FLAG or Paint.SUBPIXEL_TEXT_FLAG or Paint.LINEAR_TEXT_FLAG).apply { isElegantTextHeight = false }
         /** 字后面的淡光晕（玻璃很透，壁纸花的时候也读得清）。 */
         var halo = 0
+        /** 经典样式：小块是实心的，不画玻璃光。 */
+        var classic = false
         /** 小玻璃块（下一节、标签）：半透的底 + 顶部柔光 + 亮边。 */
         fun glass(l: Float, tp: Float, r: Float, bt: Float, rad: Float, col: Int, a: Float) {
+            if (classic) { round(l, tp, r, bt, rad - 2f, col); return }
             round(l, tp, r, bt, rad, CourseWidgets.withAlpha(col, a))
             CourseWidgets.glassShine(cv, r - l, bt - tp, rad, 0.8f, l, tp, 0.8f)
         }
@@ -251,7 +306,7 @@ object CourseWidgets {
         /** 画一行字，(x, top) 为左上角；align 0 左、1 居中、2 右；放不下就省略号。返回宽度。 */
         fun text(s: String, x: Float, top: Float, size: Float, col: Int, bold: Boolean = false, align: Int = 0, maxW: Float = 9999f): Float {
             t.textSize = size; t.color = col; t.typeface = if (bold) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
-            if (halo != 0) t.setShadowLayer(2.4f, 0f, 0f, halo) else t.clearShadowLayer()
+            if (halo != 0) t.setShadowLayer(0.7f, 0f, 0.4f, halo) else t.clearShadowLayer()
             val e = TextUtils.ellipsize(s, t, maxW, TextUtils.TruncateAt.END).toString()
             val w = t.measureText(e)
             val fm = t.fontMetrics
@@ -263,7 +318,7 @@ object CourseWidgets {
         fun chip(s: String, x: Float, top: Float, size: Float, fg: Int, bg: Int, bold: Boolean = false, right: Boolean = false): Float {
             val w = width(s, size, bold) + 12f; val h = size + 8f
             val l = if (right) x - w else x
-            round(l, top, l + w, top + h, h / 2, CourseWidgets.withAlpha(bg, 0.85f)); text(s, l + w / 2, top + 4f - size * 0.09f, size, fg, bold, 1); return w
+            round(l, top, l + w, top + h, h / 2, if (classic) bg else CourseWidgets.withAlpha(bg, 0.85f)); text(s, l + w / 2, top + 4f - size * 0.09f, size, fg, bold, 1); return w
         }
         fun bar(l: Float, cy: Float, r: Float, h: Float, frac: Float, track: Int, fill: Int) {
             round(l, cy - h / 2, r, cy + h / 2, h / 2, track)
@@ -401,6 +456,20 @@ object CourseWidgets {
                 d.spark(w * s.value[0], h * s.value[1], s.value[2], listOf(yel, lav, mint, pink)[s.index])
         }
     }
+}
+
+/** 小部件样式：液态玻璃（默认）/ 经典（改版前的实心皮肤底）。存在 SharedPreferences `widget` 的 `style`。 */
+object WidgetStyle {
+    const val GLASS = "glass"
+    const val CLASSIC = "classic"
+    val ALL = listOf(GLASS to "液态玻璃", CLASSIC to "经典")
+    private fun p(c: Context) = c.getSharedPreferences("widget", Context.MODE_PRIVATE)
+    fun get(c: Context): String = norm(p(c).getString("style", null))
+    fun norm(v: String?): String = if (v == CLASSIC) CLASSIC else GLASS
+    fun classic(c: Context) = get(c) == CLASSIC
+    /** 换样式：存下来并立刻重画所有小部件。 */
+    fun set(c: Context, v: String) { p(c).edit().putString("style", norm(v)).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
+    val ver = androidx.compose.runtime.mutableStateOf(0)
 }
 
 /** 到点重画小部件；改时间、改时区、更新安装后也重画。 */

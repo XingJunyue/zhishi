@@ -125,7 +125,7 @@ private fun RowLink(t: String, sub: String?, onClick: () -> Unit) {
 private fun LangChip(t: String, on: Boolean, onClick: () -> Unit) {
     Text(t, fontSize = 14.sp, color = if (on) C.OnClay else C.Ink,
         modifier = Modifier.padding(4.dp)
-            .liquidGlass(CircleShape, tint = C.Clay, fill = if (on) C.Clay.copy(alpha = 0.86f) else null, shadow = 0.dp).clickable { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp))
+            .glassButton(CircleShape, tint = C.Clay, fill = if (on) C.Clay.copy(alpha = 0.80f) else null, shadow = 0.dp) { onClick() }.padding(horizontal = 14.dp, vertical = 8.dp))
 }
 
 /** 皮肤选择：每套一个圆形的插画缩略图（深浅色跟当前模式），下面是名字；选中的套一圈主色。下面一行是这套皮肤的一句话。 */
@@ -167,6 +167,11 @@ fun WidgetScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Text(tr("上面是正在上的课（课间就是最近的下一节），下面是再下一节；今天没课就是一张白卡。颜色跟着皮肤走。"),
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp))
+        // 小部件样式：液态玻璃 / 经典（改版前的实心皮肤底），换了马上重画桌面上的小部件
+        val sv = WidgetStyle.ver.value
+        val style = remember(sv) { WidgetStyle.get(c) }
+        SectionTitle(tr("小部件样式"), tr("两种样式都跟着皮肤换色"))
+        Segments(WidgetStyle.ALL.map { tr(it.second) }, WidgetStyle.ALL.indexOfFirst { it.first == style }.coerceAtLeast(0)) { i -> WidgetStyle.set(c, WidgetStyle.ALL[i].first) }
         WidgetCard(tr("课表 4×2"), true, canPin) { pin(CourseWidget4::class.java) }
         WidgetCard(tr("课表 2×2"), false, canPin) { pin(CourseWidget2::class.java) }
         tip?.let { Note(it) }
@@ -180,13 +185,13 @@ private fun WidgetCard(title: String, wide: Boolean, canPin: Boolean, onPin: () 
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     Every(30_000) { tick++ }
-    val bmp = remember(tick, Skins.skinState.value, C.dark) { try { CourseWidgets.preview(c, wide).asImageBitmap() } catch (x: Exception) { null } }
+    val bmp = remember(tick, Skins.skinState.value, C.dark, WidgetStyle.ver.value) { try { CourseWidgets.preview(c, wide).asImageBitmap() } catch (x: Exception) { null } }
     SoftCard(Modifier.fillMaxWidth().padding(top = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
             if (canPin) Text(tr("添加到桌面"), fontSize = 13.sp, color = C.OnClay, fontWeight = FontWeight.SemiBold,
                 style = androidx.compose.material3.LocalTextStyle.current.copy(shadow = null),
-                modifier = Modifier.liquidGlass(CircleShape, tint = C.Clay, fill = C.Clay.copy(alpha = 0.86f), shadow = 0.dp).clickable { onPin() }.padding(horizontal = 14.dp, vertical = 8.dp))
+                modifier = Modifier.glassButton(CircleShape, tint = C.Clay, fill = C.Clay.copy(alpha = 0.80f), shadow = 0.dp) { onPin() }.padding(horizontal = 14.dp, vertical = 8.dp))
         }
         // 小部件本身是透明的玻璃：直接放在插画背景上预览，和放在桌面壁纸上一样
         Box(Modifier.fillMaxWidth().padding(top = 14.dp).padding(4.dp), contentAlignment = Alignment.Center) {

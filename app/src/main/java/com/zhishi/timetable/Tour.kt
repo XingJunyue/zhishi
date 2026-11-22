@@ -50,6 +50,12 @@ object Tour {
 
     /** 新版本在最前面加。id 一旦发出去就不要改（用来记「看过没有」）。 */
     val WHATS_NEW = listOf(
+        Release("glass2", listOf(
+            TourPage("玻", "全新液态玻璃导航栏和按键", "底部导航栏变成真正的液态玻璃：后面的内容清清楚楚透出来，边缘会折射、有水光；选中的那颗玻璃水滴会滑过去、按住时鼓起来。按钮、切换和小标签也是一样的玻璃，按下去像水滴。（需要安卓 13 及以上，更早的系统保留原来的样子。）", "table:0"),
+            TourPage("件", "小部件文字更清晰", "桌面小部件按真实尺寸和屏幕密度绘制，去掉了发虚的字晕；玻璃底稍微实一点，亮边更清楚，在各种壁纸上都读得清。还可以在「我的 → 桌面小部件」里换回改版前的「经典」样式，两种都跟着皮肤换色。", "widget"),
+            TourPage("办", "待办时间更精细", "截止时间可以精确到分钟（时、分滚轮），也可以设成全天；有「1 小时后、今晚、明天、下周一、下次上课前」等快捷时间；提醒可以提前 5 分钟到 1 天。过期的待办单独放在「已过期」里。", "todo"),
+            TourPage("课", "课表页不再反复弹出导入", "以前从「我的」点过「导入课表」后，每次回到课表页都会再弹一次导入菜单，现在修好了。已经有课时不会再自动弹出。", "table:0"),
+        )),
         Release("glass", listOf(
             TourPage("玻", "液态玻璃界面与小部件", "卡片、底部导航、按钮和弹窗都换成了清透的液态玻璃：不模糊，皮肤插画清清楚楚透出来，边上一圈水光。桌面小部件也是透明玻璃，跟着皮肤染色。", "settings"),
             TourPage("导", "修复导入页按钮被导航栏遮挡", "从教务导入时，底部的提示和「导入课表」按钮不会再被导航栏挡住：导入页打开时导航栏自动收起。", "table:1"),
@@ -183,7 +189,7 @@ fun TourHost() {
                     val last = i == pages.size - 1
                     Text(if (last) tr("开始使用") else tr("下一步"), fontSize = 14.sp, color = C.OnClay, fontWeight = FontWeight.SemiBold, textAlign = TextAlign.Center,
                         style = androidx.compose.material3.LocalTextStyle.current.copy(shadow = null),
-                        modifier = Modifier.liquidGlass(CircleShape, tint = C.Clay, fill = C.Clay.copy(alpha = 0.88f), shadow = 0.dp).clickable { if (last) Tour.done(c, w) else i++ }.padding(horizontal = 20.dp, vertical = 11.dp))
+                        modifier = Modifier.glassButton(CircleShape, tint = C.Clay, fill = C.Clay.copy(alpha = 0.88f), shadow = 0.dp) { if (last) Tour.done(c, w) else i++ }.padding(horizontal = 20.dp, vertical = 11.dp))
                 }
             }
         }

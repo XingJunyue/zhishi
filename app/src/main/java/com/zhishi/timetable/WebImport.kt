@@ -377,8 +377,7 @@ private fun JwWeb(kind: String, start: String, onBack: () -> Unit, onParsed: (Li
                     verticalAlignment = Alignment.CenterVertically) {
                     Text(if (busy) (if (pending) tr("页面还在加载，加载完自动导入…") else tr("正在{0}…", tr(JwOutcome.stepLabel(stepNow)))) else if (kind in setOf("generic", "cf", "nr", "umooc")) tr("登录后打开课表页面，再点导入") else tr("登录后直接点导入，不用打开课表页面"), fontSize = 12.sp, color = C.Soft, lineHeight = 16.sp, modifier = Modifier.weight(1f),
                         maxLines = 2, overflow = TextOverflow.Ellipsis)
-                    Box(Modifier.liquidGlass(CircleShape, tint = C.Clay, fill = if (busy) C.Track.copy(alpha = 0.7f) else C.Clay.copy(alpha = 0.9f), shadow = 0.dp)
-                        .clickable(enabled = !busy) { grab(null) }.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    Box(Modifier.glassButton(CircleShape, tint = C.Clay, fill = if (busy) C.Track.copy(alpha = 0.7f) else C.Clay.copy(alpha = 0.9f), shadow = 0.dp, enabled = !busy) { grab(null) }.padding(horizontal = 20.dp, vertical = 12.dp)) {
                         if (busy) CircularProgressIndicator(Modifier.size(18.dp), color = C.Clay, strokeWidth = 2.dp)
                         else Text(tr("导入课表"), fontSize = 15.sp, color = C.OnClay, fontWeight = FontWeight.Bold, style = LocalTextStyle.current.copy(shadow = null))
                     }

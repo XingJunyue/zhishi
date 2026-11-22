@@ -56,7 +56,7 @@ fun CalendarScreen(onOpenTodo: (Todo) -> Unit = {}) {
             }
             RoundBtn("‹") { month = month.minusMonths(1) }
             if (month != YearMonth.from(LocalDate.ofEpochDay(today)) || sel != today) Text(tr("今天"), fontSize = 13.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold,
-                modifier = Modifier.padding(horizontal = 4.dp).liquidGlass(RoundedCornerShape(14.dp), shadow = 3.dp).clickable {
+                modifier = Modifier.padding(horizontal = 4.dp).glassButton(RoundedCornerShape(14.dp), shadow = 3.dp) {
                     month = YearMonth.from(LocalDate.ofEpochDay(today)); sel = today }.padding(horizontal = 12.dp, vertical = 8.dp))
             RoundBtn("›") { month = month.plusMonths(1) }
         }
@@ -126,7 +126,7 @@ fun CalendarScreen(onOpenTodo: (Todo) -> Unit = {}) {
 
 @Composable
 private fun RoundBtn(t: String, onClick: () -> Unit) {
-    Box(Modifier.padding(start = 6.dp).size(38.dp).liquidGlass(CircleShape).clickable { onClick() },
+    Box(Modifier.padding(start = 6.dp).size(38.dp).glassButton(CircleShape) { onClick() },
         contentAlignment = Alignment.Center) { Text(t, fontSize = 22.sp, color = C.Ink, lineHeight = 22.sp) }
 }
 

@@ -27,7 +27,12 @@ object Term {
 
     /** 所有课程。 */
     fun desired(c: Context): List<Slot> = list(c, "courses")
-    fun setDesired(c: Context, d: List<Slot>) { put(c, "courses", d); CourseWidgets.safeUpdate(c) }
+    fun setDesired(c: Context, d: List<Slot>) {
+        put(c, "courses", d)
+        // 有过课（导入、日历、手动加）就记下来：以后课表页再也不自动弹「导入课表」
+        if (d.any { it.kind == "course" }) ImportPrompt.markImported(c)
+        CourseWidgets.safeUpdate(c)
+    }
 
     // ---------- 时间小工具 ----------
     fun nowMin(): Int = Calendar.getInstance().let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }

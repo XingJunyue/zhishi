@@ -103,6 +103,17 @@ object TimetableTest {
     @Volatile var query: String? = null
 }
 
+/** 「导入课表」自动弹出的规则。 */
+object ImportPrompt {
+    /** 本次启动已经自动弹过了。 */
+    @Volatile var shownThisLaunch = false
+    private fun p(c: android.content.Context) = c.getSharedPreferences("table", android.content.Context.MODE_PRIVATE)
+    fun imported(c: android.content.Context) = p(c).getBoolean("imported", false)
+    fun markImported(c: android.content.Context) { if (!imported(c)) p(c).edit().putBoolean("imported", true).apply() }
+    /** 纯函数（单测）：只有课表是空的、从没导入过、这次启动还没弹过，才自动弹。 */
+    fun shouldAuto(hasCourses: Boolean, everImported: Boolean, shown: Boolean) = !hasCourses && !everImported && !shown
+}
+
 private class Block(val s: Slot, val d: Int, val a: Int, val b: Int, val on: Boolean)
 
 // ---------------- 课表整页 ----------------
@@ -167,6 +178,14 @@ fun TimetableScreen() {
             6 -> { closeAll(); web = true }
             7 -> { closeAll(); showSecs = true }
             8 -> { closeAll(); importMenu = true }
+        }
+        // 用掉这次跳转：以前 sub 一直停在 8（「我的 → 导入课表」、教程里的按钮），每次切回课表页都会重新弹出导入菜单
+        if (Nav.sub != 0) Nav.sub = Nav.NONE
+    }
+    // 还一节课都没有、也从没导入过：每次启动最多自动弹一次导入菜单（有教程在显示时不弹）
+    LaunchedEffect(Unit) {
+        if (ImportPrompt.shouldAuto(courses.isNotEmpty(), ImportPrompt.imported(c), ImportPrompt.shownThisLaunch) && Tour.show.value == null && !importMenu) {
+            ImportPrompt.shownThisLaunch = true; importMenu = true
         }
     }
 
@@ -287,8 +306,7 @@ fun TimetableScreen() {
                         else -> tr("回到本周")
                     }
                     if (tag != null) Text(tag, fontSize = 11.sp, color = C.ClayDeep, maxLines = 1, fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.padding(start = 10.dp).liquidGlass(RoundedCornerShape(10.dp), shadow = 3.dp)
-                            .clickable(enabled = nowWeek != null && shownWeek != nowWeek) { scope.launch { pager.animateScrollToPage(((nowWeek ?: 1) - 1).coerceIn(0, pages - 1)) } }
+                        modifier = Modifier.padding(start = 10.dp).glassButton(RoundedCornerShape(10.dp), shadow = 3.dp, enabled = nowWeek != null && shownWeek != nowWeek) { scope.launch { pager.animateScrollToPage(((nowWeek ?: 1) - 1).coerceIn(0, pages - 1)) } }
                             .padding(horizontal = 8.dp, vertical = 3.dp))
                 }
                 val td = LocalDate.ofEpochDay(today)
@@ -318,7 +336,7 @@ fun TimetableScreen() {
 
         // ----- 格子 -----
         val days = if (weekend) (1..7).toList() else (1..5).toList()
-        HorizontalPager(pager, Modifier.fillMaxSize(), beyondBoundsPageCount = 1) { page ->
+        HorizontalPager(pager, Modifier.fillMaxSize(), beyondViewportPageCount = 1) { page ->
             val week: Int? = if (term >= 0) page + 1 else null
             val monday = if (week != null) term + (week - 1) * 7L else Term.mondayOf(today)
             WeekGrid(courses, pal, days, week, monday, today, starts, ends, showOff,
@@ -405,7 +423,7 @@ fun decodeText(b: ByteArray): String {
 
 @Composable
 private fun TopIcon(onClick: () -> Unit, content: @Composable () -> Unit) {
-    Box(Modifier.padding(start = 8.dp).size(42.dp).liquidGlass(CircleShape).clickable { onClick() }, contentAlignment = Alignment.Center) { content() }
+    Box(Modifier.padding(start = 8.dp).size(42.dp).glassButton(CircleShape) { onClick() }, contentAlignment = Alignment.Center) { content() }
 }
 
 /** 日历图标（右上角：学期与显示）。 */

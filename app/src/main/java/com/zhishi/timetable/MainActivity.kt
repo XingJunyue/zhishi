@@ -27,6 +27,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -36,6 +39,8 @@ import kotlinx.coroutines.launch
 /** 外部要求打开某一页（小部件点进来、测试脚本）："table:1" = 课表页的第 1 个动作。 */
 object Nav {
     val open = mutableStateOf<String?>(null)
+    /** 已经处理过的跳转（不再触发任何动作）。 */
+    const val NONE = -1
     val subState = mutableStateOf(0)
     var sub: Int get() = subState.value; set(v) { subState.value = v }
     /** 有整屏流程打开着（教务导入等）：底部导航条收起来，免得盖住页面底部的按钮。 */
@@ -107,8 +112,13 @@ fun App() {
     BackHandler(enabled = !sub && screen != "table") { screen = "table" }
     if (Updater.enabled()) UpdatePrompt()
     LaunchedEffect(Unit) { Tour.check(ctx) }
+    val artSrc = rememberGlassSource()
+    val pageSrc = rememberGlassSource()
     Box(Modifier.fillMaxSize()) {
-        Backdrop()
+      // 整页（插画 + 页面）录下来给底部导航条折射；插画单独再录一份给页面里的按钮折射
+      Box(Modifier.fillMaxSize().glassSource(pageSrc)) {
+       CompositionLocalProvider(LocalGlassArt provides artSrc) {
+        Backdrop(Modifier.glassSource(artSrc))
         AnimatedContent(
             targetState = screen,
             transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(140)) },
@@ -125,14 +135,21 @@ fun App() {
                 }
             }
         }
+       }
+      }
         AnimatedVisibility(!sub && Nav.fullScreen.value == 0, Modifier.align(Alignment.BottomCenter),
             enter = fadeIn(tween(180)) + slideInVertically { it / 2 }, exit = fadeOut(tween(120)) + slideOutVertically { it / 2 }) {
-            BottomBar(screen, Modifier) { screen = it }
+            CompositionLocalProvider(LocalGlassPage provides pageSrc) { BottomBar(screen, Modifier) { screen = it } }
         }
     }
 }
 
-/** 底部液态玻璃导航条：课表 / 待办 / 日历 / 我的，选中的那个用皮肤主色的实心图标，下面垫一颗玻璃胶囊。 */
+/**
+ * 底部液态玻璃导航条：课表 / 待办 / 日历 / 我的。
+ * API 33+：整条是一块透镜，把后面的页面原样（不模糊）透出来，边缘折射、带色散和跟光走的亮边；
+ * 选中的那个下面是一颗玻璃水滴，切换时弹簧滑过去，跑起来横向拉长、到位轻轻晃一下，按住时鼓起来变亮。
+ * 更低的版本：老的半透明底 + 亮边 + 顶部水光。
+ */
 @Composable
 private fun BottomBar(cur: String, m: Modifier, go: (String) -> Unit) {
     val items = listOf(
@@ -141,22 +158,56 @@ private fun BottomBar(cur: String, m: Modifier, go: (String) -> Unit) {
         Triple("calendar", tr("日历"), Icons.Filled.DateRange to Icons.Outlined.DateRange),
         Triple("me", tr("我的"), Icons.Filled.AccountCircle to Icons.Outlined.AccountCircle),
     )
+    val page = LocalGlassPage.current
+    val lensOn = GlassLens.supported && !GlassLens.broken && page?.layer != null
+    val dark = C.dark
+    val idx = items.indexOfFirst { it.first == cur }.let { if (it < 0) 0 else it }
+    val pos = remember { androidx.compose.animation.core.Animatable(idx.toFloat()) }
+    LaunchedEffect(idx) { pos.animateTo(idx.toFloat(), androidx.compose.animation.core.spring(dampingRatio = 0.58f, stiffness = 260f)) }
+    val sources = remember { List(items.size) { androidx.compose.foundation.interaction.MutableInteractionSource() } }
+    val pressedStates = sources.map { it.collectIsPressedAsState() }
+    val anyPressed = pressedStates.any { it.value }
+    val press by androidx.compose.animation.core.animateFloatAsState(if (anyPressed) 1f else 0f,
+        androidx.compose.animation.core.spring(dampingRatio = 0.45f, stiffness = 420f), label = "press")
+    // 透明的条：深浅皮肤用不同的字色 + 柔和的投影，压在任何内容上都读得清
+    val ink = if (dark) Color.White.copy(alpha = 0.92f) else lerp(C.Ink, Color.Black, 0.15f)
+    val sel = if (dark) lerp(C.Clay, Color.White, 0.45f) else C.ClayDeep
+    val textShadow = androidx.compose.ui.graphics.Shadow(
+        if (dark) Color.Black.copy(alpha = 0.75f) else Color.White.copy(alpha = 0.95f), androidx.compose.ui.geometry.Offset(0f, 1f), 6f)
     val shape = CircleShape
-    Row(
-        m.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth()
-            .liquidGlass(shape, Glass.BAR, fill = Glass.bar(), shadow = 10.dp).padding(horizontal = 6.dp, vertical = 6.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        for ((id, label, icons) in items) {
-            val on = id == cur
-            // 没选中的用 Soft（比 Faint 深 / 亮一档），压在课表格子上也读得清
-            val tint by animateColorAsState(if (on) C.ClayDeep else C.Soft, label = "tab")
-            val pill by animateColorAsState(if (on) (if (C.dark) Color.White.copy(alpha = 0.13f) else androidx.compose.ui.graphics.lerp(Color.White, C.Clay, 0.12f).copy(alpha = 0.85f)) else Color.Transparent, label = "pill")
-            Column(Modifier.weight(1f).clip(CircleShape).background(pill).clickable { go(id) }.padding(vertical = 6.dp),
-                horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(if (on) icons.first else icons.second, null, tint = tint, modifier = Modifier.size(24.dp))
-                Text(label, fontSize = 11.sp, color = tint, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1,
-                    modifier = Modifier.padding(top = 2.dp))
+    val barMod = if (lensOn) Modifier.liquidGlass(shape, fill = if (dark) Color.Black.copy(alpha = 0.10f) else Color.White.copy(alpha = 0.08f), shadow = 10.dp,
+        lens = LensSpec(cover = true, band = 18.dp, strength = 0.75f, chroma = 0.35f, spec = 1.1f, glow = 0.08f,
+            tint = if (dark) lerp(C.Card, C.Clay, 0.10f).copy(alpha = 0.12f) else lerp(Color.White, C.Clay, 0.08f).copy(alpha = 0.10f)), source = page)
+        else Modifier.liquidGlass(shape, Glass.BAR, fill = Glass.bar(), shadow = 10.dp)
+    BoxWithConstraints(m.navigationBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth().then(barMod).padding(horizontal = 6.dp, vertical = 6.dp)) {
+        val tabW = maxWidth / items.size
+        // 水滴：跟着 pos 滑，速度越快横向越长、竖向越扁
+        Box(Modifier.matchParentSize().wrapContentWidth(Alignment.Start)) {
+            Box(Modifier.width(tabW).fillMaxHeight()
+                .offset { androidx.compose.ui.unit.IntOffset((pos.value * tabW.toPx()).toInt(), 0) }
+                .graphicsLayer {
+                    val st = (kotlin.math.abs(pos.velocity) * 0.09f).coerceAtMost(0.42f)
+                    scaleX = 1f + st + 0.09f * press; scaleY = 1f - st * 0.28f + 0.07f * press
+                }
+                .then(if (lensOn) Modifier.liquidGlass(shape, fill = if (dark) Color.White.copy(alpha = 0.10f) else lerp(Color.White, C.Clay, 0.10f).copy(alpha = 0.30f),
+                    shadow = 3.dp, press = press,
+                    lens = LensSpec(cover = true, strength = 0.55f, chroma = 0.45f, mag = 0.10f, spec = 1.3f, glow = 0.12f), source = page)
+                else Modifier.liquidGlass(shape, fill = if (dark) Color.White.copy(alpha = 0.13f) else lerp(Color.White, C.Clay, 0.12f).copy(alpha = 0.85f), shadow = 0.dp, press = press)))
+        }
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            items.forEachIndexed { i, (id, label, icons) ->
+                val on = id == cur
+                val tint by animateColorAsState(if (on) sel else ink, label = "tab")
+                Column(Modifier.weight(1f).clip(CircleShape).clickable(interactionSource = sources[i], indication = null) { go(id) }.padding(vertical = 6.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box {
+                        // 图标的柔和投影：同一个图标在下面错开 1px、用投影色画一遍
+                        Icon(if (on) icons.first else icons.second, null, tint = textShadow.color.copy(alpha = 0.5f), modifier = Modifier.size(24.dp).offset(y = 1.dp))
+                        Icon(if (on) icons.first else icons.second, null, tint = tint, modifier = Modifier.size(24.dp))
+                    }
+                    Text(label, fontSize = 11.sp, color = tint, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Medium, maxLines = 1,
+                        style = LocalTextStyle.current.copy(shadow = textShadow), modifier = Modifier.padding(top = 2.dp))
+                }
             }
         }
     }

@@ -3,6 +3,7 @@ package com.zhishi.timetable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -94,7 +95,7 @@ fun Chip(text: String, warm: Boolean = false) {
         text, fontSize = 12.sp,
         color = if (warm) C.ClayDeep else C.SageInk,
         modifier = Modifier.padding(top = 8.dp, end = 6.dp)
-            .liquidGlass(CircleShape, tint = if (warm) C.Clay else C.Sage, fill = (if (warm) C.ClayPale else C.SagePale).copy(alpha = 0.55f), shadow = 0.dp)
+            .liquidGlass(CircleShape, tint = if (warm) C.Clay else C.Sage, fill = (if (warm) C.ClayPale else C.SagePale).copy(alpha = 0.55f), shadow = 0.dp, lens = LensSpec(chroma = 0.2f))
             .padding(horizontal = 10.dp, vertical = 4.dp)
     )
 }
@@ -104,8 +105,8 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean 
     // 主色染的玻璃胶囊：主色半透，带亮边和顶部水光
     Box(
         modifier.fillMaxWidth().height(52.dp)
-            .liquidGlass(CircleShape, tint = C.Clay, fill = if (enabled) C.Clay.copy(alpha = 0.86f) else C.Track.copy(alpha = 0.6f), shadow = if (enabled) 8.dp else 0.dp)
-            .clickable(enabled = enabled) { onClick() },
+            .glassButton(CircleShape, tint = C.Clay, fill = if (enabled) C.Clay.copy(alpha = 0.80f) else C.Track.copy(alpha = 0.6f), shadow = if (enabled) 8.dp else 0.dp,
+                enabled = enabled, lens = LensSpec(band = 16.dp, strength = 0.7f)) { onClick() },
         contentAlignment = Alignment.Center
     ) { Text(text, fontSize = 15.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.5.sp, color = if (enabled) C.OnClay else C.Faint,
         style = LocalTextStyle.current.copy(shadow = null)) }
@@ -114,7 +115,7 @@ fun PrimaryButton(text: String, modifier: Modifier = Modifier, enabled: Boolean 
 /** 次要按钮：浅底主色字。 */
 @Composable
 fun GhostButton(text: String, modifier: Modifier = Modifier, onClick: () -> Unit) {
-    Box(modifier.height(48.dp).liquidGlass(CircleShape, shadow = 4.dp).clickable { onClick() }.padding(horizontal = 18.dp),
+    Box(modifier.height(48.dp).glassButton(CircleShape, shadow = 4.dp, lens = LensSpec(band = 16.dp, strength = 0.7f)) { onClick() }.padding(horizontal = 18.dp),
         contentAlignment = Alignment.Center) {
         Text(text, fontSize = 14.sp, color = C.ClayDeep, fontWeight = FontWeight.SemiBold)
     }
@@ -139,17 +140,35 @@ fun Every(ms: Long, now: Boolean = true, block: () -> Unit) {
     }
 }
 
+/** 分段选择：选中的那段下面垫一颗玻璃水滴，切换时弹簧滑过去（跑起来拉长、到位轻晃），按住时鼓起来。 */
 @Composable
 fun Segments(options: List<String>, sel: Int, onSel: (Int) -> Unit) {
-    Row(Modifier.fillMaxWidth().liquidGlass(CircleShape, shadow = 0.dp).padding(4.dp)) {
-        options.forEachIndexed { i, t ->
-            val on = i == sel
-            val bg by animateColorAsState(if (on) C.Card.copy(alpha = if (C.dark) 0.45f else 0.7f) else Color.Transparent, label = "seg")
-            val fg by animateColorAsState(if (on) C.ClayDeep else C.Soft, label = "segT")
-            Box(
-                Modifier.weight(1f).clip(CircleShape).background(bg).clickable { onSel(i) }.padding(vertical = 9.dp),
-                contentAlignment = Alignment.Center
-            ) { Text(t, fontSize = 13.sp, color = fg, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1) }
+    val n = options.size.coerceAtLeast(1)
+    val pos = remember { Animatable(sel.toFloat()) }
+    LaunchedEffect(sel) { pos.animateTo(sel.toFloat(), spring(dampingRatio = 0.58f, stiffness = 300f)) }
+    val sources = remember(n) { List(n) { androidx.compose.foundation.interaction.MutableInteractionSource() } }
+    val anyPressed = sources.map { it.collectIsPressedAsState() }.any { it.value }
+    val press by animateFloatAsState(if (anyPressed) 1f else 0f, spring(dampingRatio = 0.45f, stiffness = 420f), label = "segPress")
+    BoxWithConstraints(Modifier.fillMaxWidth().liquidGlass(CircleShape, shadow = 0.dp).padding(4.dp)) {
+        val w = maxWidth / n
+        Box(Modifier.matchParentSize().wrapContentWidth(Alignment.Start)) {
+            Box(Modifier.width(w).fillMaxHeight()
+                .offset { androidx.compose.ui.unit.IntOffset((pos.value * w.toPx()).toInt(), 0) }
+                .graphicsLayer {
+                    val st = (kotlin.math.abs(pos.velocity) * 0.09f).coerceAtMost(0.35f)
+                    scaleX = 1f + st + 0.06f * press; scaleY = 1f - st * 0.25f + 0.06f * press
+                }
+                .liquidGlass(CircleShape, fill = C.Card.copy(alpha = if (C.dark) 0.40f else 0.62f), shadow = 2.dp, press = press, lens = LensSpec(chroma = 0.3f, glow = 0.12f)))
+        }
+        Row(Modifier.fillMaxWidth()) {
+            options.forEachIndexed { i, t ->
+                val on = i == sel
+                val fg by animateColorAsState(if (on) C.ClayDeep else C.Soft, label = "segT")
+                Box(
+                    Modifier.weight(1f).clip(CircleShape).clickable(interactionSource = sources[i], indication = null) { onSel(i) }.padding(vertical = 9.dp),
+                    contentAlignment = Alignment.Center
+                ) { Text(t, fontSize = 13.sp, color = fg, fontWeight = if (on) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1) }
+            }
         }
     }
 }
@@ -237,7 +256,7 @@ fun Backdrop(modifier: Modifier = Modifier) {
 /** 二级页面左上角的返回按钮。 */
 @Composable
 fun BackButton(onBack: () -> Unit) {
-    Box(Modifier.size(40.dp).liquidGlass(CircleShape, shadow = 4.dp).clickable { onBack() }, contentAlignment = Alignment.Center) {
+    Box(Modifier.size(40.dp).glassButton(CircleShape, shadow = 4.dp) { onBack() }, contentAlignment = Alignment.Center) {
         val ink = C.Ink
         Canvas(Modifier.size(18.dp)) {
             val w = size.width; val sw = w * 0.11f

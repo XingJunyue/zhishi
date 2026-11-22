@@ -4,7 +4,7 @@
 
 ## 范围
 - 只做课表和学习相关：课表格子与编辑、教务导入、日历 / 文件 / 截图导入、学期与节次设置、**待办**、月历视图、课表小部件、皮肤、设置、关于与更新、教程。
-- 待办是用户明确要的（2026-11 改版时提出）：标题、备注、截止时间、关联课程（按课名）、完成、到点提醒；分组今天 / 即将 / 已完成，左右滑删除；存 SharedPreferences `todo` 的 `items`，课表备份 / 导出里带 `todos` 字段（旧备份没有就不动现有待办）。逻辑在 `Todo.kt`（`Todos` 纯函数有单测 `TodoTest`），界面在 `TodoUi.kt`。
+- 待办是用户明确要的（2026-11 改版时提出）：标题、备注、截止时间（精确到分钟的时 / 分滚轮，或全天 `allDay`）、快捷时间（`Todos.preset`、「下次上课前」= `Todos.nextClass`）、关联课程（按课名）、完成、提醒（可提前 `before` 分钟，全天从当天 8:00 算；`Todos.alarmAt` 决定闹钟时刻）；分组 已过期 / 今天 / 即将 / 已完成；左右滑删除；存 SharedPreferences `todo` 的 `items`，课表备份 / 导出里带 `todos` 字段（旧备份没有就不动现有待办）。逻辑在 `Todo.kt`（`Todos` 纯函数有单测 `TodoTest`），界面在 `TodoUi.kt`。
 - 到点提醒：`TodoAlarm` 用 AlarmManager，有精确闹钟权限（`canScheduleExactAlarms`）才用精确的，否则不精确；通知权限 POST_NOTIFICATIONS 只在用户第一次打开某条待办的提醒时申请。`TodoReminder` 发通知，开机 / 更新后重排。
 - 不做任何应用守护 / 拦截 / 专注 / 使用时长统计；不要加无障碍、使用情况访问、悬浮窗、设备管理、查询全部应用、通知监听这类权限。（待办提醒用的 POST_NOTIFICATIONS、SCHEDULE_EXACT_ALARM、RECEIVE_BOOT_COMPLETED 是允许的。）
 
@@ -13,6 +13,9 @@
 - 课表页顶部：大号粗体「第N周」+「周一 11.21」，右上角「＋」（添加课程和所有导入，底部弹出）和日历图标（学期与显示）。下面一周日期条，今天是柔和的圆角胶囊；左边时间列是每节的上 / 下课时间 + 细虚线时间轴；课块是半透明的柔和色块，没有粗边框和阴影。
 - 字体：全部系统无衬线（`Serif` 现在就是默认字体，名字保留免得到处改）。
 - 液态玻璃（2026-11-22，用户要的 iOS 26 Liquid Glass 风格）：清透、带水光，**不要模糊 / 毛玻璃**。统一用 `Glass.kt` 的 `Modifier.liquidGlass(shape, level, tint, fill, shadow)`：很透的底（浅色白 ~16%、深色 ~10%，按皮肤主色轻染）+ 左上亮右下淡的细亮边 + 顶部柔光 + 底边暗边 + 只画在形状外的轻投影，内容按形状裁剪（调用处不用再 clip）。`level` 0 = 清透（卡片、按钮、课块），`Glass.THICK` = 底部弹出 / 对话框 / 盖在网页上的条（~98.5% 不透明：实测 94% / 97% 时后面列表的深色字仍有看得出的残影）。导航条的底用 `Glass.bar()`（皮肤卡片色，深色 ~90%、浅色 ~80%，没选中的字用 `C.Soft`），输入框底用 `Glass.field()`（~96%）。`GlassSheet` 的遮罩加重（黑 浅色 45% / 深色 58%）。底部弹出一律用 `GlassSheet`，对话框 `containerColor = Transparent, tonalElevation = 0.dp, shape = DialogShape, modifier = dialogGlass()`。字统一带一圈很淡的光晕（`ZhishiTheme` 里的 `LocalTextStyle` shadow，浅色白、深色黑），主色实底按钮上的字去掉光晕。
+- 真·液态玻璃（build-14，用户要「水灵、灵动」的 iOS 26 效果）：Compose BOM 2024.09.03（Compose 1.7，需要 `GraphicsLayer`）。`App` 把整页（插画 + 页面）录进 `LocalGlassPage`、只录插画进 `LocalGlassArt`（`Modifier.glassSource`）。`liquidGlass(lens = LensSpec(...))` 在 API 33+ 用 AGSL `RuntimeShader`（`GlassLens.SRC`）把后面的内容重新画一遍：边缘折射、轻微色散、跟着左上光的亮边、内发光，中间平、不模糊。`cover = true` = 整块都画（导航条、选中水滴，折射 `LocalGlassPage`），否则只画边缘一圈（页面里的按钮，折射插画——页面里的东西不能折射整页，会自己画自己）。不同窗口（底部弹出、对话框）里自动不走透镜。着色器编译 / 绘制失败记 `ZhishiGlass` 日志并永久退回老画法；API < 33 也是老画法。所有按钮 / 小标签用 `Modifier.glassButton`（透镜 + 按下像水滴鼓起变亮的弹簧，无涟漪）；`Segments` 和底部导航的选中项是会滑动、拉伸、回弹的玻璃水滴。卡片不开透镜（滚动性能），底 12% / 8%。
+- 小部件两种样式（`WidgetStyle`，SharedPreferences `widget` 的 `style`）：液态玻璃（默认）/ 经典（build-9 那种实心皮肤底 + 淡插画，代码路径是 `CLASSIC`，别删）。「我的 → 桌面小部件」里切换，切了立刻重画。位图按真实 dp × 密度画（`bitmapSize`，API 31+ 用 `OPTION_APPWIDGET_SIZES`），字不加模糊光晕。
+- 课表页的「导入课表」菜单：`Nav.sub` 处理完置 `Nav.NONE`（以前停在 8，每次切回课表页都重新弹）。只有课表空、从没有过课（`ImportPrompt`，SharedPreferences `table` 的 `imported`，`Term.setDesired` 有课就记上）时，每次启动最多自动弹一次。
 - 整屏流程（教务导入等）调用 `HideBottomBar()`：打开期间底部导航条收起，免得盖住页面底部按钮。新加整屏页面也要这样。
 - 每套皮肤有整屏插画背景（浅 / 深各一张，`res/drawable-nodpi/skin_<id>_<light|dark>.webp`，插画在右上、右边和底部，中间留白）和圆形缩略图（`..._thumb.webp`）；`Backdrop` 铺在所有页面下面，卡片用 `C.Glass` 半透明。插画是 AI 生成后压成 WebP 的，要换就整套换，别直接截参考图（参考图里有手机边框和假界面）。
 - 应用图标：用户自己给的图（星空 / 樱花 / 远山水彩，中间金色圆环 + 三张叠着的彩色卡片）。自适应图标背景层 `ic_launcher_bg.webp` = 整张图（圆环在 66dp 安全区内），前景 `ic_launcher_fg.xml` 透明，单色层 `ic_mono.xml` 是圆环里三张卡片的剪影；旧版 mipmap PNG 取中间 70%。应用内（我的、关于、教程第一页）用 `AppIcon` 显示同一张。不要换成别的图。
@@ -49,7 +52,7 @@
 - `CourseWidget.kt`：4×2 / 2×2，整张画成位图。排版、内容和行为照搬留白；颜色取当前皮肤。
 - 刷新：没有后台服务，改用 `AlarmManager.set(RTC)`（不唤醒）排下一次：今天还有课就下一分钟，没课到明天 0 点；`WidgetTick` 接收闹钟和改时间 / 时区 / 更新安装广播。改课、改设置、换皮肤都会 `CourseWidgets.safeUpdate`。
 - 小部件页（「我的 → 桌面小部件」）显示和桌面同一套画法的实时预览（`CourseWidgets.preview`），支持一键添加（`requestPinAppWidget`）。
-- 小部件是液态玻璃：透明底（皮肤底色，浅色 ~34%、深色 ~44% 不透明）+ 很淡的皮肤插画（`faintArt`）+ `glassShine`（顶部柔光、底边暗边、渐变亮边），「下一节」块也是小玻璃；字带淡光晕（`setShadowLayer`），壁纸花的时候也读得清。不模糊。换皮肤立刻重画。
+- 小部件液态玻璃样式：皮肤底色（浅色 ~52%、深色 ~62% 不透明，左侧字区再叠一层淡底）+ 很淡的皮肤插画（`faintArt`）+ `glassShine`（顶部柔光、底边暗边、更亮的渐变亮边），「下一节」块也是小玻璃；字不加模糊光晕（深色只有一道 0.7px 细影）。经典样式见上。换皮肤立刻重画。
 
 ## 用户的决定（不要推翻）
 - 课表节次时间由用户自己编辑，不内置东北大学作息预设；导入只在教务数据返回时间时才写时间。
