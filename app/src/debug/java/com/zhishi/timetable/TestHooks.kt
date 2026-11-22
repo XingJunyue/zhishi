@@ -11,6 +11,8 @@ import java.io.File
  *  --ez seed true   跳过引导，放几节示例课程
  *  --es wtint wall|skin / --ei wclear 0..90   小部件玻璃颜色来源 / 透明度
  *  --es wallpaper dark|light   把模拟器壁纸换成一张深色 / 浅色的渐变图（只有调试版有 SET_WALLPAPER）
+ *  --es seedat before|between|after|ending|offday|tiny   崩溃排查：按「现在」造今天的课（第一节还没开始 / 课间 / 今天的课都上完 /
+ *                    一分钟后下课 / 今天没课 / 极短的课），并放各种边界待办（全天提醒、提前量、关联到今天已没课的课程、没日期却开着提醒）
  *  --ez notodos true 清空待办（截待办空状态；再 --ez seed true 会放回示例待办）
  *  --es skin <id> / --ei mode 0|1|2   换皮肤 / 深浅色（截图用）
  *  --es ocr 文件名  识别 app 专属目录里的图片，把结果打到 logcat（标签 ZhishiTest）
@@ -21,6 +23,8 @@ object TestHooks {
         i.getStringExtra("setlang")?.let { Log.i("ZhishiTest", "lang -> $it"); Tr.set(c, it); return }
         if (i.getBooleanExtra("notodos", false)) TodoStore.save(c, emptyList())
         if (i.getBooleanExtra("seed", false)) seed(c)
+        i.getStringExtra("seedat")?.let { seedAt(c, it) }
+        if (i.getBooleanExtra("oldformat", false)) oldFormat(c)
         i.getStringExtra("skin")?.let { Skins.setSkin(c, Skins.byId(it)) }
         if (i.hasExtra("mode")) Skins.setMode(c, i.getIntExtra("mode", 0))
         i.getStringExtra("wtint")?.let { WidgetStyle.setTint(c, it) }
@@ -92,5 +96,51 @@ object TestHooks {
             android.app.WallpaperManager.getInstance(c).setBitmap(b, null, true, android.app.WallpaperManager.FLAG_SYSTEM)
             Log.i("ZhishiTest", "wallpaper ${if (dark) "dark" else "light"} -> ${WallTint.read(c)}")
         } catch (x: Throwable) { Log.w("ZhishiTest", "wallpaper failed: $x") }
+    }
+
+    private fun seedAt(c: Context, mode: String) {
+        Tour.skipAll(c)
+        val m = Term.nowMin(); val d = Term.weekday(); val other = if (d == 7) 1 else d + 1
+        fun sl(id: String, n: String, f: Int, t: Int, day: Int = d) = Slot(id, n, setOf(day), f.coerceIn(0, 1438), t.coerceIn(1, 1439), 1, room = "教101", teacher = "李老师")
+        val today = when (mode) {
+            "before" -> listOf(sl("a1", "高等数学", m + 90, m + 135), sl("a2", "大学英语", m + 150, m + 195))
+            "between" -> listOf(sl("a1", "高等数学", m - 80, m - 35), sl("a2", "大学英语", m + 25, m + 70))
+            "after" -> listOf(sl("a1", "高等数学", m - 130, m - 85), sl("a2", "大学英语", m - 47, m - 2))
+            "ending" -> listOf(sl("a1", "高等数学", m - 44, m + 1))
+            "tiny" -> listOf(sl("a1", "高等数学", m, m + 1), sl("a2", "线代", m + 1, m + 1))
+            else -> emptyList()
+        }
+        Term.setDesired(c, today + listOf(sl("o1", "工程制图", 480, 580, other), sl("o2", "大学英语", 600, 700, other)))
+        if (Term.termStart(c) < 0) Term.setWeekNow(c, 12)
+        val now = System.currentTimeMillis(); val t = Term.todayEpoch()
+        TodoStore.save(c, listOf(
+            Todo("e1", "全天带提醒", "", Todos.allDayAt(t), true, "", allDay = true, before = 60, created = now),
+            Todo("e2", "关联今天已没课的课程", "", Todos.at(t, (m + 5).coerceAtMost(1439)), true, "高等数学", before = 30, created = now),
+            Todo("e3", "没日期却开着提醒", "", -1L, true, "", allDay = true, before = 1440, created = now),
+            Todo("e4", "过期的", "", now - 3_600_000L, true, "不存在的课", created = now),
+        ))
+        Log.i("ZhishiTest", "seedat $mode m=$m d=$d")
+    }
+
+    /** 老版本 / 被改坏的存储：字段缺失、类型不对、未知的皮肤和样式、坏掉的节次时间。启动和各页面都不能因此崩。 */
+    private fun oldFormat(c: Context) {
+        Tour.skipAll(c)
+        val m = Term.nowMin(); val d = Term.weekday()
+        c.getSharedPreferences("term", Context.MODE_PRIVATE).edit()
+            .putString("courses", """[{"id":"x1","n":"老格式课","d":[$d],"f":${(m - 60).coerceAtLeast(0)},"t":${(m - 10).coerceAtLeast(1)}},
+                {"id":"x2","n":"坏字段","d":["一",$d],"f":"abc","t":null,"w":[1,"x"],"l":9},
+                {"n":"没有 id","d":[$d],"f":${m + 30},"t":${m + 20}},
+                "不是对象", 42, null,
+                {"id":"x3","n":"","d":[0,8,-1],"f":-50,"t":5000,"k":"course"}]""")
+            .putString("secs", "480,abc,,600").putString("secE", "x,1") .putInt("secLen", -5).putLong("term", Term.todayEpoch() + 400).putInt("weeks", 0)
+            .apply()
+        c.getSharedPreferences("todo", Context.MODE_PRIVATE).edit()
+            .putString("items", """[{"id":"o1","t":"老待办","due":${System.currentTimeMillis() + 3600000},"re":true,"co":"老格式课"},
+                {"id":"o2","t":"坏的","due":"明天","re":"yes","ad":1,"rb":-30}, "x", null, {"t":"没 id","due":-1,"re":true,"ad":true,"rb":99999}]""")
+            .apply()
+        c.getSharedPreferences("look", Context.MODE_PRIVATE).edit().putString("skin", "nosuchskin").putInt("mode", 7).apply()
+        c.getSharedPreferences("widget", Context.MODE_PRIVATE).edit().putString("style", "???").putString("tint", "???").putInt("clear", 500).apply()
+        Skins.init(c)
+        Log.i("ZhishiTest", "oldformat written")
     }
 }
