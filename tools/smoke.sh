@@ -83,6 +83,21 @@ go widget; sleep 3; tapText 经典; shot 09-widget-classic 3
 adb shell am start -n $P/.MainActivity --es skin yehang --ei mode 2 > /dev/null; go widget; shot 09-widget-classic-yehang-dark 3
 tapText 液态玻璃; sleep 2
 adb shell am start -n $P/.MainActivity --es skin chunyu --ei mode 1 > /dev/null
+# build-16：待办空状态（水墨插画）在春雨 / 夜航 / 樱 / 暮山浅、深色下各截一张，再放回示例待办
+for sk in chunyu yehang ying mushan; do for mode in 1 2; do
+  adb shell am start -n $P/.MainActivity --ez notodos true --es skin $sk --ei mode $mode > /dev/null; go todo; shot "10-todo-empty-$sk-$mode" 3
+done; done
+adb shell am start -n $P/.MainActivity --es skin chunyu --ei mode 1 > /dev/null; go table:0; shot 10-table-icon 2
+adb shell am start -n $P/.MainActivity --ez seed true > /dev/null; sleep 2
+# build-16：小部件跟随壁纸 / 跟随皮肤 / 透明度；换深色、浅色壁纸看跟随效果
+adb shell am start -n $P/.MainActivity --es wallpaper dark > /dev/null; sleep 4; go widget; shot 10-widget-wall-dark 3
+adb shell input swipe 540 1900 540 700 400; shot 10-widget-wall-dark-b 2
+adb shell am start -n $P/.MainActivity --ei wclear 90 > /dev/null; go widget; shot 10-widget-wall-dark-clear90 3
+adb shell am start -n $P/.MainActivity --ei wclear 0 > /dev/null; go widget; shot 10-widget-wall-dark-clear0 3
+adb shell am start -n $P/.MainActivity --ei wclear 65 --es wtint skin --es skin yehang --ei mode 2 > /dev/null; go widget; shot 10-widget-tint-skin-yehang-dark 3
+adb shell am start -n $P/.MainActivity --es wtint wall --es wallpaper light > /dev/null; sleep 4; go widget; shot 10-widget-wall-light 3
+adb shell am start -n $P/.MainActivity --es skin chunyu --ei mode 1 > /dev/null; sleep 1
+adb logcat -d -s ZhishiTest | grep wallpaper | tail -3
 # 从「我的」点「导入课表」后再回课表页：导入菜单不应该再弹出来（build-13 的问题）
 go table:8; sleep 3; adb shell input keyevent KEYCODE_BACK; sleep 1; tapText 待办; sleep 2; tapText 课表; shot 09-table-no-reimport 3
 # 液态玻璃透镜：着色器编译 / 绘制失败会记在 ZhishiGlass

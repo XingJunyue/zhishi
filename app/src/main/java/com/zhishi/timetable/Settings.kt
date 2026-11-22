@@ -165,13 +165,26 @@ fun WidgetScreen() {
         if (!ok) tip = tr("这个桌面不支持一键添加：长按桌面空白处 → 小部件 → 找到「知时」")
     }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
-        Text(tr("上面是正在上的课（课间就是最近的下一节），下面是再下一节；今天没课就是一张白卡。颜色跟着皮肤走。"),
+        Text(tr("上面是正在上的课（课间就是最近的下一节），下面是再下一节；今天没课就是一张白卡。"),
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp))
         // 小部件样式：液态玻璃 / 经典（改版前的实心皮肤底），换了马上重画桌面上的小部件
         val sv = WidgetStyle.ver.value
         val style = remember(sv) { WidgetStyle.get(c) }
-        SectionTitle(tr("小部件样式"), tr("两种样式都跟着皮肤换色"))
+        SectionTitle(tr("小部件样式"), tr("经典样式始终跟着皮肤换色"))
         Segments(WidgetStyle.ALL.map { tr(it.second) }, WidgetStyle.ALL.indexOfFirst { it.first == style }.coerceAtLeast(0)) { i -> WidgetStyle.set(c, WidgetStyle.ALL[i].first) }
+        if (style == WidgetStyle.GLASS) {
+            // 液态玻璃：颜色跟随壁纸 / 皮肤，透明度可调（拖动时预览跟着变，松手才写入并重画桌面上的小部件）
+            val tint = remember(sv) { WidgetStyle.tint(c) }
+            SectionTitle(tr("玻璃颜色"), tr("跟随壁纸：按壁纸的主色自动选深浅、色调和文字颜色"))
+            Segments(WidgetStyle.TINTS.map { tr(it.second) }, WidgetStyle.TINTS.indexOfFirst { it.first == tint }.coerceAtLeast(0)) { i -> WidgetStyle.setTint(c, WidgetStyle.TINTS[i].first) }
+            if (tint == WidgetStyle.WALL && remember(sv) { WallTint.read(c) } == null)
+                Note(tr("这台手机没有提供壁纸颜色（Android 8.1 以下或动态壁纸），先按皮肤配色。"))
+            val clear = remember(sv) { WidgetStyle.clear(c) }
+            var moved by remember { mutableStateOf(0) }
+            LaunchedEffect(moved) { if (moved > 0) { kotlinx.coroutines.delay(400); CourseWidgets.safeUpdate(c) } }
+            Box(Modifier.padding(top = 10.dp)) { StepSlider(tr("透明度"), clear, 0..90, 5, "%") { if (it != clear) { WidgetStyle.setClear(c, it, redraw = false); moved++ } } }
+            Note(tr("桌面小部件看不到身后壁纸的像素，做不了真正的折射；这里是按壁纸配色，让玻璃和壁纸更搭。"))
+        }
         WidgetCard(tr("课表 4×2"), true, canPin) { pin(CourseWidget4::class.java) }
         WidgetCard(tr("课表 2×2"), false, canPin) { pin(CourseWidget2::class.java) }
         tip?.let { Note(it) }
@@ -185,7 +198,11 @@ private fun WidgetCard(title: String, wide: Boolean, canPin: Boolean, onPin: () 
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     Every(30_000) { tick++ }
-    val bmp = remember(tick, Skins.skinState.value, C.dark, WidgetStyle.ver.value) { try { CourseWidgets.preview(c, wide).asImageBitmap() } catch (x: Exception) { null } }
+    val bmp = remember(tick, Skins.skinState.value, C.dark, WidgetStyle.ver.value, WallTint.ver.value) { try { CourseWidgets.preview(c, wide).asImageBitmap() } catch (x: Exception) { null } }
+    // 跟随壁纸时：预览底下垫一块按壁纸主色做的渐变（App 读不到壁纸本身，只能用它的颜色模拟）
+    val wall = remember(WidgetStyle.ver.value, WallTint.ver.value) {
+        if (!WidgetStyle.classic(c) && WidgetStyle.followWall(c)) WallTint.read(c) else null
+    }
     SoftCard(Modifier.fillMaxWidth().padding(top = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(title, fontSize = 17.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.weight(1f))
@@ -194,7 +211,9 @@ private fun WidgetCard(title: String, wide: Boolean, canPin: Boolean, onPin: () 
                 modifier = Modifier.glassButton(CircleShape, tint = C.Clay, fill = C.Clay.copy(alpha = 0.80f), shadow = 0.dp) { onPin() }.padding(horizontal = 14.dp, vertical = 8.dp))
         }
         // 小部件本身是透明的玻璃：直接放在插画背景上预览，和放在桌面壁纸上一样
-        Box(Modifier.fillMaxWidth().padding(top = 14.dp).padding(4.dp), contentAlignment = Alignment.Center) {
+        val under = if (wall == null) Modifier else Modifier.clip(RoundedCornerShape(20.dp)).background(
+            androidx.compose.ui.graphics.Brush.linearGradient(listOf(Color(wall.primary), Color(wall.secondary ?: wall.primary), Color(wall.tertiary ?: wall.secondary ?: wall.primary))))
+        Box(Modifier.fillMaxWidth().padding(top = 14.dp).then(under).padding(if (wall == null) 4.dp else 12.dp), contentAlignment = Alignment.Center) {
             if (bmp != null) Image(bmp, null, contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth(if (wide) 1f else 0.5f).aspectRatio(if (wide) 320f / 156f else 1f))
         }

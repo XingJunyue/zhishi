@@ -615,12 +615,12 @@ private fun WeekGrid(
     }
 }
 
-/** 还没有课时：一场细雨落在新芽上，下面两个大按钮。 */
+/** 还没有课时：一笔水墨圆相里三道短横，下面两个大按钮。 */
 @Composable
 private fun EmptyTable(m: Modifier, onImport: () -> Unit, onNew: () -> Unit) {
     Column(m.padding(horizontal = 28.dp).fillMaxWidth().liquidGlass(RoundedCornerShape(28.dp), Glass.BAR).padding(22.dp),
         horizontalAlignment = Alignment.CenterHorizontally) {
-        RainArt(size = 130.dp)
+        InkArt(InkKind.TABLE, size = 128.dp)
         Text(tr("还没有课"), fontSize = 20.sp, fontFamily = Serif, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 6.dp))
         Text(tr("从教务网站、截图或文件导入；也可以直接点格子加课。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 6.dp))
         Spacer(Modifier.height(16.dp))

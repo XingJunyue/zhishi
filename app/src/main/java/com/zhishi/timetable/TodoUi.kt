@@ -88,7 +88,7 @@ fun TodoScreen() {
         if (all.isEmpty()) {
             Column(Modifier.padding(22.dp).fillMaxWidth().liquidGlass(RoundedCornerShape(24.dp)).padding(22.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                RainArt(size = 110.dp)
+                InkArt(InkKind.TODO, size = 116.dp)
                 Text(tr("还没有待办"), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(top = 4.dp))
                 Text(tr("记下作业、实验报告、考试，可以关联到某门课，到点提醒你。"), fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp,
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 6.dp, bottom = 14.dp))

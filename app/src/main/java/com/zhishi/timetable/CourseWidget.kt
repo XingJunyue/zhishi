@@ -89,7 +89,7 @@ object CourseWidgets {
         if (big.isEmpty() && small.isEmpty()) { schedule(c, emptyList(), false); return }
         val list = today(c)
         schedule(c, list, true)
-        val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.desired(c).hashCode()}|${Term.widgetLevel(c)}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
+        val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.desired(c).hashCode()}|${Term.widgetLevel(c)}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${WidgetStyle.tint(c)}|${WidgetStyle.clear(c)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
         if (!force && sig == lastSig) return
         lastSig = sig
         val now = plan(list, Term.nowMin())
@@ -120,9 +120,17 @@ object CourseWidgets {
     private var NEXT_FG = 0
     private var DARK = false
     private var CLASSIC = false
+    /** 「跟随壁纸」生效中（液态玻璃 + 读到了壁纸颜色）：不铺皮肤插画，颜色全按壁纸。 */
+    private var WALL = false
+    private var CLEAR = WidgetStyle.CLEAR_DEFAULT
     private lateinit var PAL: Pal
     private fun usePal(c: Context) {
-        val p = Skins.palFor(c); PAL = p; DARK = p.dark
+        CLASSIC = WidgetStyle.classic(c)
+        CLEAR = WidgetStyle.clear(c)
+        val wall = if (!CLASSIC && WidgetStyle.followWall(c)) WallTint.read(c) else null
+        WALL = wall != null
+        val p = if (wall != null) WallTint.pal(wall, Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null))) else Skins.palFor(c)
+        PAL = p; DARK = p.dark
         INK = p.i(p.ink); SUB = p.i(p.soft); ACC = p.i(p.deep); ACC_PALE = p.i(p.pale); ON_ACC = p.i(p.onAcc)
         CREAM = p.i(p.bg); FREE_BG = p.i(p.card); NEXT_BG = p.i(p.sagePale); NEXT_FG = p.i(p.sageInk)
     }
@@ -156,7 +164,6 @@ object CourseWidgets {
         val cv = Canvas(b); cv.scale(scale * k, scale * k)
         val d = D(cv)
         val free = now.main == null
-        CLASSIC = WidgetStyle.classic(c)
         d.classic = CLASSIC
         if (CLASSIC) {
             // 经典样式（改成液态玻璃之前、build-9 的样子）：实心的皮肤底色 + 淡插画，字不加任何阴影
@@ -164,11 +171,12 @@ object CourseWidgets {
             d.round(0f, 0f, lw, lh, 22f, if (free) FREE_BG else CREAM)
             faintArt(c, cv, lw, lh)
         } else {
-            // 不再给字加模糊的光晕（会让字发虚）：浅色不加，深色只加一道很细的暗影
-            d.halo = if (DARK) 0x73000000 else 0
-            // 液态玻璃底：皮肤底色（桌面壁纸透出来），淡淡一层插画，顶部水光、底边暗边、左上亮右下淡的亮边。不模糊。
+            // 字不加模糊光晕（会发虚），只有一道 0.7px 的细影：深色玻璃上是暗影、浅色玻璃上是淡白影；玻璃越透影越明显
+            d.halo = withAlpha(if (DARK) 0xFF000000.toInt() else 0xFFFFFFFF.toInt(), WallTint.shadowAlpha(CLEAR, DARK))
+            // 液态玻璃底：很清透的一层（按透明度设置），字区再叠一层局部淡底；顶部水光、底边暗边、左上亮右下淡的亮边。不模糊。
+            // 跟随皮肤时再铺一层很淡的皮肤插画；跟随壁纸时不铺（插画和壁纸会打架）
             glassCard(cv, lw, lh)
-            faintArt(c, cv, lw, lh)
+            if (!WALL) faintArt(c, cv, lw, lh)
             glassShine(cv, lw, lh, R_CARD, 1.4f)
         }
         when {
@@ -206,16 +214,19 @@ object CourseWidgets {
     private const val R_CARD = 26f
 
     /**
-     * 卡片的玻璃底色：皮肤底色，浅色 ~52%、深色 ~62% 不透明（build-13 是 34% / 44%，花壁纸上字看不清），往主色偏一点点；
-     * 左边放字的区域再从左往右叠一层淡淡的同色（左 +18% → 右 0），字底更干净，右边插画照样透。
+     * 卡片的玻璃底色（build-16 起）：底色（皮肤或壁纸配出来的）按「透明度」设置铺一层，默认 65% 透明 ≈ 26% 实
+     * （build-15 是浅色 52%、深色 62%，在照片壁纸上像一块灰板）；字区再叠一层局部淡底（左上实 → 右下渐隐），
+     * 玻璃越透这层越实一点，字照样读得清，右边和下面露出壁纸。
      */
     private fun glassCard(cv: Canvas, w: Float, h: Float) {
         val fill = mix(PAL.i(PAL.bg), PAL.i(PAL.acc), 0.06f)
         val rect = RectF(0f, 0f, w, h)
-        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(fill, if (DARK) 0.62f else 0.52f) }
+        val p = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = withAlpha(fill, WallTint.fillAlpha(CLEAR)) }
         cv.drawRoundRect(rect, R_CARD, R_CARD, p)
+        val pa = WallTint.plateAlpha(CLEAR)
         val plate = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            shader = android.graphics.LinearGradient(0f, 0f, w * 0.75f, 0f, withAlpha(fill, 0.18f), withAlpha(fill, 0f), android.graphics.Shader.TileMode.CLAMP)
+            shader = android.graphics.LinearGradient(0f, 0f, w * 0.8f, h * 0.35f, intArrayOf(withAlpha(fill, pa), withAlpha(fill, pa * 0.55f), withAlpha(fill, 0f)),
+                floatArrayOf(0f, 0.55f, 1f), android.graphics.Shader.TileMode.CLAMP)
         }
         cv.drawRoundRect(rect, R_CARD, R_CARD, plate)
     }
@@ -469,6 +480,20 @@ object WidgetStyle {
     fun classic(c: Context) = get(c) == CLASSIC
     /** 换样式：存下来并立刻重画所有小部件。 */
     fun set(c: Context, v: String) { p(c).edit().putString("style", norm(v)).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
+
+    /** 液态玻璃的颜色来源：跟随壁纸（默认）/ 跟随皮肤。`tint` = wall | skin。经典样式不受影响，始终跟皮肤。 */
+    const val WALL = "wall"
+    const val SKIN = "skin"
+    val TINTS = listOf(WALL to "跟随壁纸", SKIN to "跟随皮肤")
+    fun tint(c: Context): String = if (p(c).getString("tint", null) == SKIN) SKIN else WALL
+    fun followWall(c: Context) = tint(c) == WALL
+    fun setTint(c: Context, v: String) { p(c).edit().putString("tint", if (v == SKIN) SKIN else WALL).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
+
+    /** 玻璃透明度 0..90（%），默认 65。 */
+    const val CLEAR_DEFAULT = 65
+    fun clear(c: Context): Int = p(c).getInt("clear", CLEAR_DEFAULT).coerceIn(0, 90)
+    /** 改透明度：马上存、预览马上变；redraw = false 时先不重画桌面（拖动滑块中途），松手后再重画。 */
+    fun setClear(c: Context, v: Int, redraw: Boolean = true) { p(c).edit().putInt("clear", v.coerceIn(0, 90)).apply(); ver.value++; if (redraw) CourseWidgets.safeUpdate(c) }
     val ver = androidx.compose.runtime.mutableStateOf(0)
 }
 

@@ -223,12 +223,13 @@ fun FlowRowLite(content: @Composable RowScope.() -> Unit) {
     FlowRow(Modifier.fillMaxWidth()) { content() }
 }
 
-/** 应用图标（和桌面上的一样：用户给的那张图，取中间桌面会显示的部分）。 */
+/** 应用图标（和桌面上的一样：宣纸底 + 书法「知时」+ 印章，取自适应图标中间桌面会显示的 72dp）。 */
 @Composable
 fun AppIcon(size: Dp) {
     Box(Modifier.size(size).clip(RoundedCornerShape(size * 0.28f))) {
-        androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(R.drawable.ic_launcher_bg), null,
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize().graphicsLayerScale(1.4f))
+        for (id in intArrayOf(R.drawable.ic_launcher_paper, R.drawable.ic_launcher_fg))
+            androidx.compose.foundation.Image(androidx.compose.ui.res.painterResource(id), null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.fillMaxSize().graphicsLayerScale(1.5f))
     }
 }
 private fun Modifier.graphicsLayerScale(k: Float) = this.then(androidx.compose.ui.Modifier.graphicsLayer { scaleX = k; scaleY = k })
@@ -282,38 +283,6 @@ fun Logo(size: Dp, drop: Color = C.Clay, hand: Color = C.OnClay) {
         drawLine(hand, Offset(24f * u, 31f * u), Offset(24f * u, 22f * u), 3f * u, StrokeCap.Round)
         drawLine(hand, Offset(24f * u, 31f * u), Offset(30f * u, 34.5f * u), 3f * u, StrokeCap.Round)
         drawCircle(hand, 1.9f * u, Offset(24f * u, 31f * u))
-    }
-}
-
-/** 空状态插画：斜斜的细雨落在一株新芽上，雨丝缓缓下落。 */
-@Composable
-fun RainArt(modifier: Modifier = Modifier, size: Dp = 150.dp) {
-    val t = rememberInfiniteTransition(label = "rain")
-    val fall by t.animateFloat(0f, 1f, infiniteRepeatable(tween(2600, easing = LinearEasing)), label = "fall")
-    val sway by t.animateFloat(-1f, 1f, infiniteRepeatable(tween(2200, easing = FastOutSlowInEasing), RepeatMode.Reverse), label = "sway")
-    val rain = C.Clay; val pale = C.ClayPale; val sage = C.Sage; val ink = C.SageInk
-    Canvas(modifier.size(size)) {
-        val w = this.size.width; val h = this.size.height
-        drawCircle(pale, w * 0.42f, Offset(w / 2, h * 0.52f))
-        // 雨丝
-        val cols = listOf(0.22f, 0.36f, 0.5f, 0.64f, 0.78f, 0.3f, 0.58f, 0.72f)
-        cols.forEachIndexed { i, x0 ->
-            val ph = (fall + i * 0.37f) % 1f
-            val y = h * (0.08f + ph * 0.62f)
-            val x = w * x0 - ph * w * 0.05f
-            val a = (1f - kotlin.math.abs(ph - 0.5f) * 1.6f).coerceIn(0f, 1f)
-            drawLine(rain.copy(alpha = 0.55f * a), Offset(x, y), Offset(x - w * 0.025f, y + h * 0.09f), w * 0.016f, StrokeCap.Round)
-        }
-        // 地面
-        drawLine(ink.copy(alpha = 0.35f), Offset(w * 0.24f, h * 0.84f), Offset(w * 0.76f, h * 0.84f), w * 0.014f, StrokeCap.Round)
-        // 新芽
-        val bx = w / 2; val by = h * 0.84f; val k = sway * w * 0.012f
-        drawLine(ink, Offset(bx, by), Offset(bx + k, h * 0.62f), w * 0.022f, StrokeCap.Round)
-        val l = Path().apply { moveTo(bx + k, h * 0.66f); cubicTo(bx - w * 0.06f + k, h * 0.58f, bx - w * 0.15f + k, h * 0.58f, bx - w * 0.19f + k, h * 0.62f)
-            cubicTo(bx - w * 0.15f + k, h * 0.69f, bx - w * 0.06f + k, h * 0.70f, bx + k, h * 0.66f); close() }
-        val r = Path().apply { moveTo(bx + k, h * 0.63f); cubicTo(bx + w * 0.05f + k, h * 0.53f, bx + w * 0.14f + k, h * 0.51f, bx + w * 0.2f + k, h * 0.54f)
-            cubicTo(bx + w * 0.16f + k, h * 0.63f, bx + w * 0.07f + k, h * 0.66f, bx + k, h * 0.63f); close() }
-        drawPath(l, sage.copy(alpha = 0.85f)); drawPath(r, sage)
     }
 }
 

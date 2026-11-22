@@ -9,6 +9,9 @@ import java.io.File
 /**
  * 只在调试版里有：自动化测试用。
  *  --ez seed true   跳过引导，放几节示例课程
+ *  --es wtint wall|skin / --ei wclear 0..90   小部件玻璃颜色来源 / 透明度
+ *  --es wallpaper dark|light   把模拟器壁纸换成一张深色 / 浅色的渐变图（只有调试版有 SET_WALLPAPER）
+ *  --ez notodos true 清空待办（截待办空状态；再 --ez seed true 会放回示例待办）
  *  --es skin <id> / --ei mode 0|1|2   换皮肤 / 深浅色（截图用）
  *  --es ocr 文件名  识别 app 专属目录里的图片，把结果打到 logcat（标签 ZhishiTest）
  */
@@ -16,9 +19,13 @@ object TestHooks {
     fun run(c: Context, i: Intent?) {
         i ?: return
         i.getStringExtra("setlang")?.let { Log.i("ZhishiTest", "lang -> $it"); Tr.set(c, it); return }
+        if (i.getBooleanExtra("notodos", false)) TodoStore.save(c, emptyList())
         if (i.getBooleanExtra("seed", false)) seed(c)
         i.getStringExtra("skin")?.let { Skins.setSkin(c, Skins.byId(it)) }
         if (i.hasExtra("mode")) Skins.setMode(c, i.getIntExtra("mode", 0))
+        i.getStringExtra("wtint")?.let { WidgetStyle.setTint(c, it) }
+        if (i.hasExtra("wclear")) WidgetStyle.setClear(c, i.getIntExtra("wclear", WidgetStyle.CLEAR_DEFAULT))
+        i.getStringExtra("wallpaper")?.let { wallpaper(c, it == "dark") }
         // 教程：--ez notour true 全部当看过（冒烟测试不被挡住）；--es tour first|new 直接弹出来截图
         if (i.getBooleanExtra("notour", false)) Tour.skipAll(c)
         i.getStringExtra("tour")?.let { Tour.show.value = it }
@@ -68,5 +75,22 @@ object TestHooks {
         }
         // 皮肤：--es skin qingci --ei mode 2
         Log.i("ZhishiTest", "seeded")
+    }
+
+    /** 一张像照片的渐变壁纸：深色 = 夜里的深蓝灰 + 一团暖色光；浅色 = 米白到浅蓝。 */
+    private fun wallpaper(c: Context, dark: Boolean) {
+        try {
+            val w = 1080; val h = 2400
+            val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+            val cv = android.graphics.Canvas(b)
+            val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+            val (a, z, blob) = if (dark) Triple(0xFF0B0D14.toInt(), 0xFF1C2232.toInt(), 0xFF7A5442.toInt()) else Triple(0xFFF4E9D8.toInt(), 0xFFCFE3F0.toInt(), 0xFFF2C6B4.toInt())
+            p.shader = android.graphics.LinearGradient(0f, 0f, 0f, h.toFloat(), a, z, android.graphics.Shader.TileMode.CLAMP)
+            cv.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
+            p.shader = android.graphics.RadialGradient(w * 0.5f, h * 0.42f, w * 0.55f, blob, blob and 0x00FFFFFF, android.graphics.Shader.TileMode.CLAMP)
+            cv.drawCircle(w * 0.5f, h * 0.42f, w * 0.55f, p)
+            android.app.WallpaperManager.getInstance(c).setBitmap(b, null, true, android.app.WallpaperManager.FLAG_SYSTEM)
+            Log.i("ZhishiTest", "wallpaper ${if (dark) "dark" else "light"} -> ${WallTint.read(c)}")
+        } catch (x: Throwable) { Log.w("ZhishiTest", "wallpaper failed: $x") }
     }
 }

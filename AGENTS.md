@@ -4,6 +4,7 @@
 
 ## 范围
 - 只做课表和学习相关：课表格子与编辑、教务导入、日历 / 文件 / 截图导入、学期与节次设置、**待办**、月历视图、课表小部件、皮肤、设置、关于与更新、教程。
+- 空状态插画（待办、课表没课）：`InkArt.kt` 的一笔水墨圆相 + 带锋的勾（待办）/ 三道短横（课表）+ 小朱印，墨色跟皮肤，进场一笔笔写出（build-16，用户嫌原来的粉圆 + 新芽丑）。不要换回卡通风。
 - 待办是用户明确要的（2026-11 改版时提出）：标题、备注、截止时间（精确到分钟的时 / 分滚轮，或全天 `allDay`）、快捷时间（`Todos.preset`、「下次上课前」= `Todos.nextClass`）、关联课程（按课名）、完成、提醒（可提前 `before` 分钟，全天从当天 8:00 算；`Todos.alarmAt` 决定闹钟时刻）；分组 已过期 / 今天 / 即将 / 已完成；左右滑删除；存 SharedPreferences `todo` 的 `items`，课表备份 / 导出里带 `todos` 字段（旧备份没有就不动现有待办）。逻辑在 `Todo.kt`（`Todos` 纯函数有单测 `TodoTest`），界面在 `TodoUi.kt`。
 - 到点提醒：`TodoAlarm` 用 AlarmManager，有精确闹钟权限（`canScheduleExactAlarms`）才用精确的，否则不精确；通知权限 POST_NOTIFICATIONS 只在用户第一次打开某条待办的提醒时申请。`TodoReminder` 发通知，开机 / 更新后重排。
 - 不做任何应用守护 / 拦截 / 专注 / 使用时长统计；不要加无障碍、使用情况访问、悬浮窗、设备管理、查询全部应用、通知监听这类权限。（待办提醒用的 POST_NOTIFICATIONS、SCHEDULE_EXACT_ALARM、RECEIVE_BOOT_COMPLETED 是允许的。）
@@ -18,7 +19,7 @@
 - 课表页的「导入课表」菜单：`Nav.sub` 处理完置 `Nav.NONE`（以前停在 8，每次切回课表页都重新弹）。只有课表空、从没有过课（`ImportPrompt`，SharedPreferences `table` 的 `imported`，`Term.setDesired` 有课就记上）时，每次启动最多自动弹一次。
 - 整屏流程（教务导入等）调用 `HideBottomBar()`：打开期间底部导航条收起，免得盖住页面底部按钮。新加整屏页面也要这样。
 - 每套皮肤有整屏插画背景（浅 / 深各一张，`res/drawable-nodpi/skin_<id>_<light|dark>.webp`，插画在右上、右边和底部，中间留白）和圆形缩略图（`..._thumb.webp`）；`Backdrop` 铺在所有页面下面，卡片用 `C.Glass` 半透明。插画是 AI 生成后压成 WebP 的，要换就整套换，别直接截参考图（参考图里有手机边框和假界面）。
-- 应用图标：用户自己给的图（星空 / 樱花 / 远山水彩，中间金色圆环 + 三张叠着的彩色卡片）。自适应图标背景层 `ic_launcher_bg.webp` = 整张图（圆环在 66dp 安全区内），前景 `ic_launcher_fg.xml` 透明，单色层 `ic_mono.xml` 是圆环里三张卡片的剪影；旧版 mipmap PNG 取中间 70%。应用内（我的、关于、教程第一页）用 `AppIcon` 显示同一张。不要换成别的图。
+- 应用图标（build-16，用户要求换成书法字）：书法「知时」竖排 + 右下朱红印章「雨」（好雨知时节）。字形来自 Ma Shan Zheng（马善政楷书，Google Fonts，SIL OFL 1.1，THIRD_PARTY_NOTICES 有署名），用 fontTools 把字形轮廓转成 VectorDrawable 路径，不带字体文件。自适应图标：背景 `drawable/ic_launcher_paper.xml`（宣纸色径向渐变）、前景 `ic_launcher_fg.xml`（墨字 + 印章，都在 66dp 安全区内）、单色层 `ic_mono.xml`（同样的字，印章里「雨」镂空）；mipmap PNG 由同一套矢量渲染。应用内（我的、关于、教程第一页）`AppIcon` 叠画背景 + 前景两层（放大 1.5 倍 = 桌面可见的 72dp）。要改图标就整套重新生成，别只改一层。
 - 课程等级（重要 / 普通 / 水课）只是显示用的标签：课块、小部件上标出来，`Term.showLevel` / `Term.widgetLevel` 分别开关，不附带任何限制。
 
 ## 发布流程
@@ -51,8 +52,8 @@
 ## 小部件
 - `CourseWidget.kt`：4×2 / 2×2，整张画成位图。排版、内容和行为照搬留白；颜色取当前皮肤。
 - 刷新：没有后台服务，改用 `AlarmManager.set(RTC)`（不唤醒）排下一次：今天还有课就下一分钟，没课到明天 0 点；`WidgetTick` 接收闹钟和改时间 / 时区 / 更新安装广播。改课、改设置、换皮肤都会 `CourseWidgets.safeUpdate`。
-- 小部件页（「我的 → 桌面小部件」）显示和桌面同一套画法的实时预览（`CourseWidgets.preview`），支持一键添加（`requestPinAppWidget`）。
-- 小部件液态玻璃样式：皮肤底色（浅色 ~52%、深色 ~62% 不透明，左侧字区再叠一层淡底）+ 很淡的皮肤插画（`faintArt`）+ `glassShine`（顶部柔光、底边暗边、更亮的渐变亮边），「下一节」块也是小玻璃；字不加模糊光晕（深色只有一道 0.7px 细影）。经典样式见上。换皮肤立刻重画。
+- 小部件页（「我的 → 桌面小部件」）显示和桌面同一套画法的实时预览（`CourseWidgets.preview`），支持一键添加（`requestPinAppWidget`）。液态玻璃样式下有「玻璃颜色」（跟随壁纸 / 跟随皮肤）和「透明度」滑块：拖动时预览立刻变，停 0.4 秒后重画桌面；跟随壁纸时预览底下垫一块壁纸主色渐变（App 读不到壁纸图本身）。
+- 小部件液态玻璃样式（build-16）：玻璃底按「透明度」设置铺一层（SharedPreferences `widget` 的 `clear`，0–90%，默认 65% ≈ 26% 实；build-15 的 52% / 62% 在照片壁纸上像灰板），字区再叠一层局部淡底（玻璃越透越实一点）+ `glassShine`；字只有一道 0.7px 细影（深色玻璃暗影、浅色玻璃淡白影，强度随透明度），不加模糊光晕。颜色来源 `tint`：「跟随壁纸」（默认，`WallTint.kt`：`WallpaperManager.getWallpaperColors` Android 8.1+，12+ 加 Material You 强调色和深浅提示 → 配出一份 `Pal`，不铺皮肤插画）/「跟随皮肤」（原来的皮肤底色 + 很淡的皮肤插画）。读不到壁纸颜色时退回皮肤。壁纸变了：App 进程活着时 `WallTint.listen`（`addOnColorsChangedListener`，在 `ZhishiApp` 里注册）立刻重画，另外每次小部件重画都重新读（签名里带壁纸颜色）。小部件看不到身后壁纸的像素，做不了真折射——对用户也这么说。经典样式不受 tint / clear 影响。
 
 ## 用户的决定（不要推翻）
 - 课表节次时间由用户自己编辑，不内置东北大学作息预设；导入只在教务数据返回时间时才写时间。
@@ -72,6 +73,7 @@
 - 开学日期不从教务读取，导入后让用户确认。
 
 ## 冒烟测试钩子（只在 debug 版，`TestHooks.kt`）
+- `--ez notodos true` 清空待办（截空状态）；`--es wtint wall|skin`、`--ei wclear N` 小部件玻璃颜色 / 透明度；`--es wallpaper dark|light` 换模拟器壁纸（调试版 manifest 才有 SET_WALLPAPER）。
 - `--ez seed true` 放示例课程（含一节「正在上」的课）和几条示例待办；`--es setlang zh|en|…` 换语言；`--es skin <id> --ei mode 0|1|2` 换皮肤；`--es open table:N|todo:N|calendar|settings:N|me|widget|about` 打开页面（`todo:1` 新建待办、`todo:2` 编辑第一条）（`table:1` 教务导入、`table:2` 学期、`table:3` 加课、`table:4` 改课、`table:5` 开学日期、`table:7` 每节时间、`table:8` 导入菜单）；`--es jwkind/jwurl --ez jwauto` 网页导入；`--es jwq` 预填学校搜索；`--es ocr <文件>` 识别截图。
 
 ## 工作习惯

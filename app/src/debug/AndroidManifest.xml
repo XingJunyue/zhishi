@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 只在调试版：冒烟测试换模拟器壁纸（TestHooks 的 wallpaper 参数），检查小部件「跟随壁纸」 -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.SET_WALLPAPER" />
+</manifest>
