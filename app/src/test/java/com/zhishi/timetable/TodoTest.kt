@@ -190,9 +190,11 @@ class TodoTest {
         assertTrue(txt.contains("待办") && txt.contains("日历"))
     }
 
-    @Test fun whatsNewNewestIsFix17() {
-        assertEquals("fix17", Tour.WHATS_NEW.first().id)
-        val fix = Tour.WHATS_NEW.first().pages.joinToString { it.title + it.body }
+    @Test fun whatsNewNewestIsGlass3() {
+        assertEquals("glass3", Tour.WHATS_NEW.first().id)
+        val g3 = Tour.WHATS_NEW.first().pages.joinToString { it.title + it.body }
+        assertTrue(g3.contains("小部件") && g3.contains("透明度") && g3.contains("100%") && g3.contains("滑块"))
+        val fix = Tour.WHATS_NEW.first { it.id == "fix17" }.pages.joinToString { it.title + it.body }
         assertTrue(fix.contains("导入课表") && fix.contains("小部件") && fix.contains("闪退"))
         val ink = Tour.WHATS_NEW.first { it.id == "ink" }.pages.joinToString { it.title + it.body }
         assertTrue(ink.contains("书法") && ink.contains("待办") && ink.contains("跟随壁纸") && ink.contains("透明度"))
