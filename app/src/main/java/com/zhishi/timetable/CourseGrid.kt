@@ -480,7 +480,16 @@ private fun SheetRow(mark: String, t: String, sub: String, onClick: () -> Unit) 
 
 // ---------------- 现在 / 下一节 ----------------
 
-/** 课表顶上的一条：正在上的课（还剩多久）或下一节（多久后），今天的课上完了就说一声。 */
+/** 课表顶上的一条：正在上的课（还剩多久）或下一节（多久后），今天的课上完了就说一声。
+ *
+ * 闪退记录（build-15～17）：今天的课全部上完后，从小部件进 App、导入课表后回到课表页，首帧组合 ArrayIndexOutOfBoundsException
+ * （IntStack.peek2 / ComposerImpl.endRoot）。根源是这块在 Compose 编译器 1.5.x + 运行时 1.7（BOM 2024.09）下组栈错位：
+ * 最早是 inline 的 Row 里 `return@Row` 提前返回，build-17 拆成 DoneToday() 后仍是「同一个 Row 里按条件换内容 + 按条件拼 clickable」。
+ * 现在的写法（build-18 重做）：
+ *  - 整个函数没有任何提前 return；
+ *  - 「上完啦」和「正在上 / 下一节」是两个各自完整的 composable，各有自己的 Row 和固定的 Modifier 链，不在 inline 布局里切换内容；
+ *  - 两个分支用 key 隔开，状态从一种切到另一种时整组替换，不会复用对方的槽位。
+ * 以后改这里也照这个规矩：inline 布局（Row / Column / Box）的内容里不写 return，不按条件拼 Modifier 链。 */
 @Composable
 private fun NowStrip(courses: List<Slot>, week: Int?, pal: Map<String, Pair<Color, Color>>, onOpen: (Slot, Int) -> Unit) {
     var tick by remember { mutableStateOf(0) }
@@ -488,44 +497,61 @@ private fun NowStrip(courses: List<Slot>, week: Int?, pal: Map<String, Pair<Colo
     val d = Term.weekday()
     val m = remember(tick) { Term.nowMin() }
     val todays = remember(courses, week, d) { courses.filter { d in it.days && it.from < it.to && it.inWeek(week) }.sortedBy { it.from } }
-    if (todays.isEmpty()) return
-    val n = CourseWidgets.plan(todays, m)
-    val s = n.main
+    val n = remember(todays, m) { if (todays.isEmpty()) null else CourseWidgets.plan(todays, m) }
+    val s = n?.main
+    when {
+        n == null -> Unit
+        s == null -> key("done") { DoneTodayStrip() }
+        else -> key("next") { NextStrip(s, n.live, m, pal) { onOpen(s, d) } }
+    }
+}
+
+/** 今天的课都上完了：一条静态的玻璃条，不可点。 */
+@Composable
+private fun DoneTodayStrip() {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).liquidGlass(RoundedCornerShape(18.dp))
-            .then(if (s != null) Modifier.clickable { onOpen(s, d) } else Modifier).padding(horizontal = 14.dp, vertical = 10.dp),
+            .padding(horizontal = 14.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // 不要在 Row / Column / Box 这类 inline 布局的内容里用带标签的 return 提前返回：Compose 编译器 1.5.x + 运行时 1.7（BOM 2024.09）
-        // 下会让组栈错位，首帧组合直接 ArrayIndexOutOfBoundsException（IntStack.peek2 / ComposerImpl.endRoot）——
-        // build-15/16 「今天的课都上完后」打开 App / 导入课表后回到课表页就闪退、清数据前一直崩，就是这一句。拆成独立的 composable。
-        if (s == null) DoneToday() else NextOrLive(s, n.live, m, pal)
+        Text("✓", fontSize = 14.sp, color = C.SageInk, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 10.dp))
+        Text(tr("今天的课上完啦"), fontSize = 13.sp, color = C.Soft)
     }
 }
 
+/** 正在上 / 下一节：点一下打开这节课。 */
 @Composable
-private fun DoneToday() {
-    Text("✓", fontSize = 14.sp, color = C.SageInk, fontWeight = FontWeight.Bold, modifier = Modifier.padding(end = 10.dp))
-    Text(tr("今天的课上完啦"), fontSize = 13.sp, color = C.Soft)
-}
-
-@Composable
-private fun androidx.compose.foundation.layout.RowScope.NextOrLive(s: Slot, live: Boolean, m: Int, pal: Map<String, Pair<Color, Color>>) {
+private fun NextStrip(s: Slot, live: Boolean, m: Int, pal: Map<String, Pair<Color, Color>>, onClick: () -> Unit) {
     val (bg, fg) = courseTone(colorOf(s, pal), C.dark, C.Card)
-    if (live) {
-        val t = rememberInfiniteTransition(label = "live")
-        val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(1100), RepeatMode.Reverse), label = "a")
-        Box(Modifier.size(9.dp).clip(CircleShape).background(C.Clay.copy(alpha = a)))
-    } else Box(Modifier.size(9.dp).clip(CircleShape).background(bg))
-    Column(Modifier.weight(1f).padding(start = 10.dp)) {
-        Text(if (live) tr("正在上") + " · " + Term.clock(s.from) + "–" + Term.clock(s.to) else tr("下一节") + " · " + Term.clock(s.from),
-            fontSize = 11.sp, color = C.Faint, maxLines = 1)
-        Text(s.name + if (s.room.isNotBlank()) "  @" + s.room else "", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+    Row(
+        Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 4.dp).liquidGlass(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LiveDot(live, bg)
+        Column(Modifier.weight(1f).padding(start = 10.dp)) {
+            Text(if (live) tr("正在上") + " · " + Term.clock(s.from) + "–" + Term.clock(s.to) else tr("下一节") + " · " + Term.clock(s.from),
+                fontSize = 11.sp, color = C.Faint, maxLines = 1)
+            Text(s.name + if (s.room.isNotBlank()) "  @" + s.room else "", fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        val left = if (live) s.to - m else s.from - m
+        val txt = if (live) tr("还剩 {0} 分钟", left) else if (left >= 60) tr("{0} 小时后", (left + 30) / 60) else tr("{0} 分钟后", left.coerceAtLeast(1))
+        Text(txt, fontSize = 12.sp, color = if (live) C.OnClay else fg, fontWeight = FontWeight.SemiBold, maxLines = 1,
+            modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (live) C.Clay else bg).padding(horizontal = 9.dp, vertical = 4.dp))
     }
-    val left = if (live) s.to - m else s.from - m
-    val txt = if (live) tr("还剩 {0} 分钟", left) else if (left >= 60) tr("{0} 小时后", (left + 30) / 60) else tr("{0} 分钟后", left.coerceAtLeast(1))
-    Text(txt, fontSize = 12.sp, color = if (live) C.OnClay else fg, fontWeight = FontWeight.SemiBold, maxLines = 1,
-        modifier = Modifier.clip(RoundedCornerShape(10.dp)).background(if (live) C.Clay else bg).padding(horizontal = 9.dp, vertical = 4.dp))
+}
+
+/** 左边的小圆点：正在上的课会呼吸闪烁（动画放在单独的 composable 里，正在上 / 下一节切换时不会错位）。 */
+@Composable
+private fun LiveDot(live: Boolean, bg: Color) {
+    if (live) BreathingDot() else Box(Modifier.size(9.dp).clip(CircleShape).background(bg))
+}
+
+@Composable
+private fun BreathingDot() {
+    val t = rememberInfiniteTransition(label = "live")
+    val a by t.animateFloat(0.35f, 1f, infiniteRepeatable(tween(1100), RepeatMode.Reverse), label = "a")
+    Box(Modifier.size(9.dp).clip(CircleShape).background(C.Clay.copy(alpha = a)))
 }
 
 // ---------------- 一周的格子 ----------------
