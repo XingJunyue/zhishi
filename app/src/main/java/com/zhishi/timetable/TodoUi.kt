@@ -239,7 +239,7 @@ fun TodoSheet(start: Todo, isNew: Boolean, onSave: (Todo) -> Unit, onDelete: () 
                     else if (at != null) Text(tr("将在 {0} 提醒", dueText(at)), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 6.dp))
                 }
                 if (t.remind) {
-                    Text(tr("收不到提醒？在系统设置里给知时打开「自启动」，省电策略选「无限制」。小米、华为、OPPO 等手机默认会拦后台提醒。"),
+                    Text(tr("收不到提醒？在系统设置里给知时允许「自启动 / 后台活动」，电池使用选「不限制」。很多安卓手机默认会限制后台提醒。"),
                         fontSize = 12.sp, color = C.Faint, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp))
                     FlowRowLite {
                         CourseChip(tr("1 分钟后发测试通知"), false) {

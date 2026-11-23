@@ -6,7 +6,7 @@
 - 只做课表和学习相关：课表格子与编辑、教务导入、日历 / 文件 / 截图导入、学期与节次设置、**待办**、月历视图、课表小部件、皮肤、设置、关于与更新、教程。
 - 空状态插画（待办、课表没课）：`InkArt.kt` 的一笔水墨圆相 + 带锋的勾（待办）/ 三道短横（课表）+ 小朱印，墨色跟皮肤，进场一笔笔写出（build-16，用户嫌原来的粉圆 + 新芽丑）。不要换回卡通风。
 - 待办是用户明确要的（2026-11 改版时提出）：标题、备注、截止时间（精确到分钟的时 / 分滚轮，或全天 `allDay`）、快捷时间（`Todos.preset`、「下次上课前」= `Todos.nextClass`）、关联课程（按课名）、完成、提醒（可提前 `before` 分钟，全天从当天 8:00 算；`Todos.alarmAt` 决定闹钟时刻）；分组 已过期 / 今天 / 即将 / 已完成；左右滑删除；存 SharedPreferences `todo` 的 `items`，课表备份 / 导出里带 `todos` 字段（旧备份没有就不动现有待办）。逻辑在 `Todo.kt`（`Todos` 纯函数有单测 `TodoTest`），界面在 `TodoUi.kt`。
-- 到点提醒：`TodoAlarm` 用 AlarmManager 精确闹钟（Android 13+ 靠 USE_EXACT_ALARM 装上即有；SCHEDULE_EXACT_ALARM 只给 ≤32，小米等默认不给它，之前退成不精确导致收不到）。通知权限 POST_NOTIFICATIONS 只在用户第一次打开某条待办的提醒时申请。`TodoReminder` 发通知；`ZhishiApp.onCreate`（任何进程启动）、打开 App、开机 / 更新后都 `rescheduleAll`，被系统清掉的闹钟补上，错过的（未到截止）补发一次。已提醒过的记在 prefs `todo_fired`（键 `id@提醒时刻`），防止重复提醒。编辑页开提醒时有「发一条测试通知」和跳系统应用设置（自启动 / 省电）。
+- 到点提醒：`TodoAlarm` 用 AlarmManager 精确闹钟（Android 13+ 靠 USE_EXACT_ALARM 装上即有；SCHEDULE_EXACT_ALARM 只给 ≤32，小米等默认不给它，之前退成不精确导致收不到）。通知权限 POST_NOTIFICATIONS 只在用户第一次打开某条待办的提醒时申请。`TodoReminder` 发通知；`ZhishiApp.onCreate`（任何进程启动）、打开 App、开机 / 更新后都 `rescheduleAll`，被系统清掉的闹钟补上，错过的（未到截止）补发一次。已提醒过的记在 prefs `todo_fired`（键 `id@提醒时刻`），防止重复提醒。编辑页开提醒时有「1 分钟后发测试通知」（走同一条闹钟路径，`TodoAlarm.TEST_ID`）和跳系统应用设置（自启动 / 后台活动 / 电池）。
 - 不做任何应用守护 / 拦截 / 专注 / 使用时长统计；不要加无障碍、使用情况访问、悬浮窗、设备管理、查询全部应用、通知监听这类权限。（待办提醒用的 POST_NOTIFICATIONS、SCHEDULE_EXACT_ALARM、USE_EXACT_ALARM、RECEIVE_BOOT_COMPLETED 是允许的。）
 
 ## 界面结构（2026-11 改版，照用户给的六张皮肤参考图）
@@ -51,11 +51,12 @@
 
 ## 小部件
 - `CourseWidget.kt`：4×2 / 2×2，整张画成位图。排版、内容和行为照搬留白；颜色取当前皮肤。
-- 刷新：没有后台服务，改用 `AlarmManager.set(RTC)`（不唤醒）排下一次：今天还有课就下一分钟，没课到明天 0 点；`WidgetTick` 接收闹钟和改时间 / 时区 / 更新安装广播。改课、改设置、换皮肤都会 `CourseWidgets.safeUpdate`。
+- 刷新：没有后台服务，用 `AlarmManager.setExact(RTC)`（不唤醒、精确；没精确权限退 setWindow 10s）排下一次（以前 set() 不精确，被系统攒着拖，桌面时间卡住）：今天还有课就下一分钟，没课到明天 0 点；`WidgetTick` 接收闹钟和改时间 / 时区 / 更新安装广播。改课、改设置、换皮肤都会 `CourseWidgets.safeUpdate`。
 - 小部件页（「我的 → 桌面小部件」）显示和桌面同一套画法的实时预览（`CourseWidgets.preview`），支持一键添加（`requestPinAppWidget`）。液态玻璃样式下有「玻璃颜色」（跟随壁纸 / 跟随皮肤）和「透明度」滑块：拖动时预览立刻变，停 0.4 秒后重画桌面；跟随壁纸时预览底下垫一块壁纸主色渐变（App 读不到壁纸图本身）。
 - 小部件液态玻璃样式（build-16）：玻璃底按「透明度」设置铺一层（SharedPreferences `widget` 的 `clear`，0–100%（build-21 起，原 0–90），默认 65% ≈ 26% 实；90→100 往导航条里选中的水滴（滑块）靠：拉满时卡片底和「下一节」小块保持一致，都 = 水滴（深白 10% / 浅白微染主色 30%），字区淡底去掉（用户定的：两者一致、以滑块为基准），`WallTint.toBar/innerAlpha`；build-15 的 52% / 62% 在照片壁纸上像灰板），字区再叠一层局部淡底（玻璃越透越实一点）+ `glassShine`（build-21 起质感照导航条选中水滴的透镜参数 spec 1.3 / glow 0.12 用画布近似，卡片和小块一致：顶部柔光、底边暗边、16dp 折射带越靠边越亮、内发光、跟左上光走的亮边 + 右下内反光）；字只有一道 0.7px 细影（深色玻璃暗影、浅色玻璃淡白影，强度随透明度），不加模糊光晕。颜色来源 `tint`：「跟随壁纸」（默认，`WallTint.kt`：`WallpaperManager.getWallpaperColors` Android 8.1+，12+ 加 Material You 强调色和深浅提示 → 配出一份 `Pal`，不铺皮肤插画）/「跟随皮肤」（原来的皮肤底色 + 很淡的皮肤插画）。读不到壁纸颜色时退回皮肤。壁纸变了：App 进程活着时 `WallTint.listen`（`addOnColorsChangedListener`，在 `ZhishiApp` 里注册）立刻重画，另外每次小部件重画都重新读（签名里带壁纸颜色）。小部件看不到身后壁纸的像素，做不了真折射——对用户也这么说。经典样式不受 tint / clear 影响。
 
 ## 用户的决定（不要推翻）
+- 后台 / 通知 / 小部件刷新类修复要照顾所有安卓机型，不要只针对小米做优化；用户可见文案不点名某个品牌（2026-11-23 用户提出）。
 - 课表节次时间由用户自己编辑，不内置东北大学作息预设；导入只在教务数据返回时间时才写时间。
 - 不做 WakeUp 分享口令导入；界面上也不要出现「WakeUp」字样（CSV 导入叫「Excel / CSV 导入」）。`TourAndUpdaterTest.noWakeUpWording` 会查。
 - 教务导入页不默认任何学校（包括东北大学）：打开时搜索框为空并聚焦，东大只在搜到时出现；用户选过一次后才在「上次用的」显示（SharedPreferences `jwimport` 的 `last_*`）。
