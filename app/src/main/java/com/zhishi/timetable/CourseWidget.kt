@@ -283,8 +283,9 @@ object CourseWidgets {
     const val ROW_TOP = 31f
     fun rowPad(wide: Boolean) = if (wide) 15f else 13f
     fun rowBottom(wide: Boolean) = if (wide) 12f else 11f
-    fun rowH(wide: Boolean) = if (wide) 50f else 46f
-    fun rowGap(wide: Boolean) = if (wide) 6f else 5f
+    // 4×2 一屏放两行，第三行露出一截（提示还能往下滑）
+    fun rowH(wide: Boolean) = 46f
+    fun rowGap(wide: Boolean) = 5f
 
     /** 待办小部件的头部：4×2 是「周一 11月23日 · 待办」+ 右边过期数 / 总数；2×2 是「待办」+ 总数。 */
     private fun todoHeader(d: D, w: Float, wide: Boolean, tp: TodoNow) {
@@ -311,11 +312,11 @@ object CourseWidgets {
         val (_, deep) = todoBar(t, st, all)
         val (ct, cf, cb) = todoChip(st)
         if (wide) {
-            d.round(x + 9f, y + 9f, x + 12.5f, y + h - 9f, 1.75f, deep)
+            d.round(x + 9f, y + 8f, x + 12.5f, y + h - 8f, 1.75f, deep)
             val cx = x + 20f
-            val cr = R - 10f - d.chip(ct, R - 10f, y + 7f, 9f, cf, cb, true, right = true) - 6f
-            d.text(t.title, cx, y + 6f, 13.5f, INK, true, maxW = cr - cx)
-            var tx = cx; val ly = y + 29f
+            val cr = R - 10f - d.chip(ct, R - 10f, y + 6f, 9f, cf, cb, true, right = true) - 6f
+            d.text(t.title, cx, y + 5f, 13.5f, INK, true, maxW = cr - cx)
+            var tx = cx; val ly = y + 27f
             d.clock(tx, ly + 0.5f, if (st == 0) red else SUB); tx += 14f
             tx += d.text(todoDue(t), tx, ly - 1f, 10.5f, if (st == 0) red else INK, maxW = R - 10f - tx) + 12f
             if (t.course.isNotBlank() && tx < R - 50f) { d.book(tx, ly + 0.5f, SUB); tx += 14f; tx += d.text(t.course, tx, ly - 1f, 10.5f, INK, maxW = R - 10f - tx) + 10f }

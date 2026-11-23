@@ -106,7 +106,11 @@ adb logcat -d -s ZhishiGlass > shots/glass.txt; cat shots/glass.txt | tail -5
 adb shell am start -n $P/.MainActivity --ez seed true --ez wrows true > /dev/null; sleep 5
 adb logcat -d -s ZhishiTest | grep "WROWS\|WMAIN\|WPREV" | tee shots/wrows.txt
 grep -q "WROWS ok" shots/wrows.txt || { echo "todo widget rows failed"; fail=1; }
-for f in wprev-4-demo wprev-2-demo wprev-4-real wprev-2-real; do adb pull /sdcard/Android/data/$P/files/$f.png shots/$f.png > /dev/null 2>&1 || true; done
+# 深色（夜航）液态玻璃、经典样式下也各存一份预览，最后换回春雨浅色 + 液态玻璃
+adb shell am start -n $P/.MainActivity --es skin yehang --ei mode 2 --ez wrows true --es wtag -yehang-dark > /dev/null; sleep 4
+adb shell am start -n $P/.MainActivity --es wstyle classic --ez wrows true --es wtag -classic-yehang-dark > /dev/null; sleep 4
+adb shell am start -n $P/.MainActivity --es wstyle glass --es skin chunyu --ei mode 1 > /dev/null; sleep 2
+for f in wprev-4-demo wprev-2-demo wprev-4-real wprev-2-real; do for t in "" -yehang-dark -classic-yehang-dark; do adb pull /sdcard/Android/data/$P/files/$f$t.png shots/$f$t.png > /dev/null 2>&1 || true; done; done
 go table:0; sleep 1
 
 # 应用图标：回桌面，打开应用列表

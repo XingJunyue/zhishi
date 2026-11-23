@@ -15,6 +15,7 @@ import java.io.File
  *                    一分钟后下课 / 今天没课 / 极短的课），并放各种边界待办（全天提醒、提前量、关联到今天已没课的课程、没日期却开着提醒）
  *  --ez notodos true 清空待办（截待办空状态；再 --ez seed true 会放回示例待办）
  *  --es skin <id> / --ei mode 0|1|2   换皮肤 / 深浅色（截图用）
+ *  --es wstyle glass|classic   小部件样式
  *  --ez wrows true   待办小部件的滑动列表：直接跑 TodoRows（RemoteViewsFactory）取每一行、在本进程里 inflate，结果打到 logcat（WROWS ok / FAIL），
  *                    再把待办小部件预览（示例待办 / 当前待办）存成 PNG 到 app 专属目录（wprev-*.png），冒烟测试拉下来看
 
@@ -36,7 +37,8 @@ object TestHooks {
         i.getStringExtra("wtint")?.let { WidgetStyle.setTint(c, it) }
         if (i.hasExtra("wclear")) WidgetStyle.setClear(c, i.getIntExtra("wclear", WidgetStyle.CLEAR_DEFAULT))
         i.getStringExtra("wallpaper")?.let { wallpaper(c, it == "dark") }
-        if (i.getBooleanExtra("wrows", false)) widgetRows(c)
+        i.getStringExtra("wstyle")?.let { WidgetStyle.set(c, it) }
+        if (i.getBooleanExtra("wrows", false)) widgetRows(c, i.getStringExtra("wtag") ?: "")
         // 教程：--ez notour true 全部当看过（冒烟测试不被挡住）；--es tour first|new 直接弹出来截图
         if (i.getBooleanExtra("notour", false)) Tour.skipAll(c)
         i.getStringExtra("tour")?.let { Tour.show.value = it }
@@ -55,7 +57,7 @@ object TestHooks {
         }
     }
 
-    private fun widgetRows(c: Context) {
+    private fun widgetRows(c: Context, tag: String) {
         var ok = true
         for (wide in listOf(true, false)) {
             try {
@@ -82,7 +84,7 @@ object TestHooks {
             } catch (x: Throwable) { ok = false; Log.i("ZhishiTest", "WROWS FAIL main wide=$wide ${x.javaClass.name}: ${x.message}") }
             for (demo in listOf(true, false)) try {
                 val b = CourseWidgets.previewTodo(c, wide, demo)
-                File(c.getExternalFilesDir(null), "wprev-${if (wide) 4 else 2}-${if (demo) "demo" else "real"}.png").outputStream().use { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+                File(c.getExternalFilesDir(null), "wprev-${if (wide) 4 else 2}-${if (demo) "demo" else "real"}$tag.png").outputStream().use { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
             } catch (x: Throwable) { Log.i("ZhishiTest", "WPREV FAIL ${x.message}") }
         }
         Log.i("ZhishiTest", if (ok) "WROWS ok" else "WROWS FAIL")
