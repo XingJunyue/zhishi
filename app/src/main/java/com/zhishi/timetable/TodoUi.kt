@@ -166,7 +166,6 @@ fun TodoSheet(start: Todo, isNew: Boolean, onSave: (Todo) -> Unit, onDelete: () 
     var pickDate by remember { mutableStateOf(false) }
     var askDel by remember { mutableStateOf(false) }
     var hint by remember { mutableStateOf<String?>(null) }
-    var diag by remember { mutableStateOf(false) }
     var tick by remember { mutableStateOf(0) }
     Every(30_000) { tick++ }
     val now = remember(tick, t) { System.currentTimeMillis() }
@@ -238,41 +237,6 @@ fun TodoSheet(start: Todo, isNew: Boolean, onSave: (Todo) -> Unit, onDelete: () 
                     val r = Todos.remindAt(t)
                     if (at != null && r != null && r <= now) Text(tr("提醒时间已经过了，保存后马上提醒一次"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 6.dp))
                     else if (at != null) Text(tr("将在 {0} 提醒", dueText(at)), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 6.dp))
-                }
-                if (t.remind) {
-                    Text(tr("收不到提醒？在系统设置里给知时允许「自启动 / 后台活动」，电池使用选「不限制」。很多安卓手机默认会限制后台提醒。"),
-                        fontSize = 12.sp, color = C.Faint, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp))
-                    FlowRowLite {
-                        CourseChip(tr("1 分钟后发测试通知"), false) {
-                            if (Build.VERSION.SDK_INT >= 33 && !TodoAlarm.canNotify(c)) perm.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            else { TodoAlarm.test(c); hint = tr("1 分钟后会发一条测试通知。可以先锁屏或回到桌面，看它能不能弹出来。") }
-                        }
-                        CourseChip(tr("立即发测试通知"), false) {
-                            if (Build.VERSION.SDK_INT >= 33 && !TodoAlarm.canNotify(c)) perm.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            else { TodoAlarm.postNow(c); hint = tr("已发出测试通知，看看通知栏有没有。") }
-                        }
-                        CourseChip(tr("提醒诊断"), diag) { diag = !diag }
-                        CourseChip(tr("通知与自启动设置"), false) {
-                            try {
-                                c.startActivity(android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                    android.net.Uri.fromParts("package", c.packageName, null)).addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK))
-                            } catch (x: Exception) {}
-                        }
-                    }
-                    if (diag) {
-                        val rep = remember(tick, diag, hint) { TodoAlarm.report(c) }
-                        Text(rep, fontSize = 12.sp, color = C.Soft, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp).fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp)).background(C.Sand.copy(alpha = 0.6f)).padding(10.dp))
-                        FlowRowLite {
-                            CourseChip(tr("复制诊断信息"), false) {
-                                try {
-                                    c.getSystemService(android.content.ClipboardManager::class.java)?.setPrimaryClip(android.content.ClipData.newPlainText("zhishi", rep))
-                                    hint = tr("已复制，可以粘贴发给开发者。")
-                                } catch (x: Exception) {}
-                            }
-                            CourseChip(tr("刷新"), false) { tick++ }
-                        }
-                    }
                 }
             }
             hint?.let { Note(it, warm = true) }

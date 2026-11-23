@@ -19,7 +19,7 @@ class Pal(
 }
 
 /**
- * 一套皮肤：名字、一句话简介（poem）、浅色 / 深色配色，和对应的整屏插画背景（res/drawable-nodpi/skin_<id>_<light|dark>.webp）
+ * 一套皮肤（十八套：原六套 + build-31 起按用户给的插画加的十二套）：名字、一句话简介（poem）、浅色 / 深色配色，和对应的整屏插画背景（res/drawable-nodpi/skin_<id>_<light|dark>.webp）
  * 及圆形缩略图（skin_<id>_<light|dark>_thumb.webp）。
  */
 class Skin(val id: String, val name: String, val poem: String, val light: Pal, val dark: Pal) {
@@ -34,12 +34,36 @@ class Skin(val id: String, val name: String, val poem: String, val light: Pal, v
             "mushan_light" to R.drawable.skin_mushan_light, "mushan_dark" to R.drawable.skin_mushan_dark,
             "yehang_light" to R.drawable.skin_yehang_light, "yehang_dark" to R.drawable.skin_yehang_dark,
             "ying_light" to R.drawable.skin_ying_light, "ying_dark" to R.drawable.skin_ying_dark,
+            "yinxing_light" to R.drawable.skin_yinxing_light, "yinxing_dark" to R.drawable.skin_yinxing_dark,
+            "songxue_light" to R.drawable.skin_songxue_light, "songxue_dark" to R.drawable.skin_songxue_dark,
+            "hefeng_light" to R.drawable.skin_hefeng_light, "hefeng_dark" to R.drawable.skin_hefeng_dark,
+            "zhuying_light" to R.drawable.skin_zhuying_light, "zhuying_dark" to R.drawable.skin_zhuying_dark,
+            "youlan_light" to R.drawable.skin_youlan_light, "youlan_dark" to R.drawable.skin_youlan_dark,
+            "qinglv_light" to R.drawable.skin_qinglv_light, "qinglv_dark" to R.drawable.skin_qinglv_dark,
+            "hanmei_light" to R.drawable.skin_hanmei_light, "hanmei_dark" to R.drawable.skin_hanmei_dark,
+            "liuyue_light" to R.drawable.skin_liuyue_light, "liuyue_dark" to R.drawable.skin_liuyue_dark,
+            "guixiang_light" to R.drawable.skin_guixiang_light, "guixiang_dark" to R.drawable.skin_guixiang_dark,
+            "haitang_light" to R.drawable.skin_haitang_light, "haitang_dark" to R.drawable.skin_haitang_dark,
+            "yanyu_light" to R.drawable.skin_yanyu_light, "yanyu_dark" to R.drawable.skin_yanyu_dark,
+            "guiyan_light" to R.drawable.skin_guiyan_light, "guiyan_dark" to R.drawable.skin_guiyan_dark,
             "chunyu_light_thumb" to R.drawable.skin_chunyu_light_thumb, "chunyu_dark_thumb" to R.drawable.skin_chunyu_dark_thumb,
             "xuanzhi_light_thumb" to R.drawable.skin_xuanzhi_light_thumb, "xuanzhi_dark_thumb" to R.drawable.skin_xuanzhi_dark_thumb,
             "qingci_light_thumb" to R.drawable.skin_qingci_light_thumb, "qingci_dark_thumb" to R.drawable.skin_qingci_dark_thumb,
             "mushan_light_thumb" to R.drawable.skin_mushan_light_thumb, "mushan_dark_thumb" to R.drawable.skin_mushan_dark_thumb,
             "yehang_light_thumb" to R.drawable.skin_yehang_light_thumb, "yehang_dark_thumb" to R.drawable.skin_yehang_dark_thumb,
             "ying_light_thumb" to R.drawable.skin_ying_light_thumb, "ying_dark_thumb" to R.drawable.skin_ying_dark_thumb,
+            "yinxing_light_thumb" to R.drawable.skin_yinxing_light_thumb, "yinxing_dark_thumb" to R.drawable.skin_yinxing_dark_thumb,
+            "songxue_light_thumb" to R.drawable.skin_songxue_light_thumb, "songxue_dark_thumb" to R.drawable.skin_songxue_dark_thumb,
+            "hefeng_light_thumb" to R.drawable.skin_hefeng_light_thumb, "hefeng_dark_thumb" to R.drawable.skin_hefeng_dark_thumb,
+            "zhuying_light_thumb" to R.drawable.skin_zhuying_light_thumb, "zhuying_dark_thumb" to R.drawable.skin_zhuying_dark_thumb,
+            "youlan_light_thumb" to R.drawable.skin_youlan_light_thumb, "youlan_dark_thumb" to R.drawable.skin_youlan_dark_thumb,
+            "qinglv_light_thumb" to R.drawable.skin_qinglv_light_thumb, "qinglv_dark_thumb" to R.drawable.skin_qinglv_dark_thumb,
+            "hanmei_light_thumb" to R.drawable.skin_hanmei_light_thumb, "hanmei_dark_thumb" to R.drawable.skin_hanmei_dark_thumb,
+            "liuyue_light_thumb" to R.drawable.skin_liuyue_light_thumb, "liuyue_dark_thumb" to R.drawable.skin_liuyue_dark_thumb,
+            "guixiang_light_thumb" to R.drawable.skin_guixiang_light_thumb, "guixiang_dark_thumb" to R.drawable.skin_guixiang_dark_thumb,
+            "haitang_light_thumb" to R.drawable.skin_haitang_light_thumb, "haitang_dark_thumb" to R.drawable.skin_haitang_dark_thumb,
+            "yanyu_light_thumb" to R.drawable.skin_yanyu_light_thumb, "yanyu_dark_thumb" to R.drawable.skin_yanyu_dark_thumb,
+            "guiyan_light_thumb" to R.drawable.skin_guiyan_light_thumb, "guiyan_dark_thumb" to R.drawable.skin_guiyan_dark_thumb,
         ) }
     }
 }
@@ -72,6 +96,42 @@ object Skins {
         Skin("ying", "樱", "樱花烂漫，与你相遇",
             lp(0xFFFBF3F4, 0xFFFFFDFD, 0xFF33262A, 0xFF7A6268, 0xFFAD959B, 0xFFC2607A, 0xFFA0465F, 0xFFF8E0E6, 0xFFF0E2E5, 0xFFF6EAED),
             dp(0xFF1A1215, 0xFF241A1E, 0xFFF1E5E8, 0xFFC3A9B0, 0xFF8E747B, 0xFFEE9AB0, 0xFFF5B8C7, 0xFF3F2430, 0xFF34262B, 0xFF2B1F24, 0xFF3A1220)),
+        Skin("yinxing", "银杏", "金叶满枝，秋光正好",
+            lp(0xFFF9F3E6, 0xFFFFFDF7, 0xFF2E2618, 0xFF6F6450, 0xFFA0947D, 0xFFB07A1E, 0xFF8A5C12, 0xFFF7E8C8, 0xFFEDE4D2, 0xFFF3EBDA),
+            dp(0xFF16120C, 0xFF201A12, 0xFFF1E8D8, 0xFFBFAF95, 0xFF8A7C66, 0xFFE8B45A, 0xFFF2C97F, 0xFF3A2C14, 0xFF30281C, 0xFF261F16, 0xFF2A1A04)),
+        Skin("songxue", "松雪", "松间落雪，清寂自持",
+            lp(0xFFEFF2F6, 0xFFFDFEFF, 0xFF1E2731, 0xFF5A6675, 0xFF8E99A7, 0xFF4E6C8A, 0xFF38536E, 0xFFDDE6EF, 0xFFDFE5EC, 0xFFE9EDF2),
+            dp(0xFF0E151C, 0xFF151E27, 0xFFE3EAF1, 0xFFA3B1BF, 0xFF6F7E8D, 0xFF9DBBD6, 0xFFBCD2E6, 0xFF1E2E3E, 0xFF223040, 0xFF18232E, 0xFF0C1A28)),
+        Skin("hefeng", "荷风", "荷风送香，静水生凉",
+            lp(0xFFEEF5F0, 0xFFFCFEFD, 0xFF1F2C27, 0xFF5A6E66, 0xFF8FA29A, 0xFFC86A80, 0xFFA44E64, 0xFFF6E0E5, 0xFFDDE8E2, 0xFFE7F0EB),
+            dp(0xFF0C1719, 0xFF132124, 0xFFE0EDEC, 0xFF9EB7B5, 0xFF6A8583, 0xFFF0A3B4, 0xFFF6BFCB, 0xFF3A2329, 0xFF1E3134, 0xFF16282B, 0xFF3A1220)),
+        Skin("zhuying", "竹影", "竹影清疏，心远自宁",
+            lp(0xFFF4F3EA, 0xFFFFFEF8, 0xFF222A22, 0xFF5E6A5C, 0xFF939D90, 0xFF5B8A5A, 0xFF406B40, 0xFFE2EEDC, 0xFFE5E7DA, 0xFFEEEFE4),
+            dp(0xFF0F1613, 0xFF16201B, 0xFFE1EBE3, 0xFFA0B3A5, 0xFF6D8172, 0xFF9CCB98, 0xFFB8DDB4, 0xFF1E3322, 0xFF233229, 0xFF1A261F, 0xFF0E2610)),
+        Skin("youlan", "幽兰", "空谷幽兰，淡然自芳",
+            lp(0xFFF4F2F2, 0xFFFFFEFE, 0xFF29262E, 0xFF66616E, 0xFF9A95A2, 0xFF7A68B0, 0xFF5C4C8E, 0xFFE9E4F6, 0xFFE7E4EA, 0xFFEFEDF0),
+            dp(0xFF121418, 0xFF1A1C22, 0xFFE7E6EE, 0xFFADAABB, 0xFF7A7788, 0xFFB5A6EE, 0xFFCBC0F4, 0xFF2C2645, 0xFF262832, 0xFF1E2028, 0xFF1C1238)),
+        Skin("qinglv", "青绿", "青绿山河，千里入画",
+            lp(0xFFF8F2E8, 0xFFFFFDF8, 0xFF1E2B2B, 0xFF5A6A66, 0xFF8F9D98, 0xFF2F8A7E, 0xFF1F6A60, 0xFFD8EEE8, 0xFFE8E4D8, 0xFFF1EBDF),
+            dp(0xFF0D141B, 0xFF141D26, 0xFFE0EAEE, 0xFF9DB0B8, 0xFF6A7D86, 0xFF74CDBD, 0xFF9BDDD0, 0xFF163430, 0xFF1F2C36, 0xFF17222C, 0xFF06261F)),
+        Skin("hanmei", "寒梅", "踏雪寻梅，暗香浮动",
+            lp(0xFFF4F2F5, 0xFFFFFEFF, 0xFF2A2328, 0xFF6A5F66, 0xFF9D939A, 0xFFA83A3F, 0xFF862A30, 0xFFF3DEDF, 0xFFE8E4E8, 0xFFEFECF0),
+            dp(0xFF14151B, 0xFF1C1D24, 0xFFEDE7EA, 0xFFB8ADB3, 0xFF847A80, 0xFFE8848A, 0xFFF2A6AA, 0xFF3E2226, 0xFF292A33, 0xFF20212A, 0xFF3A0E12)),
+        Skin("liuyue", "柳月", "杨柳依依，月照归途",
+            lp(0xFFF5F3EA, 0xFFFFFEF8, 0xFF262A20, 0xFF646A58, 0xFF989D8C, 0xFF6F8534, 0xFF566822, 0xFFE9EED6, 0xFFE7E7DA, 0xFFEFEFE4),
+            dp(0xFF111318, 0xFF191C22, 0xFFE8EAE4, 0xFFB0B4AA, 0xFF7D8178, 0xFFC3D48A, 0xFFD5E2A6, 0xFF2C321A, 0xFF252830, 0xFF1D2027, 0xFF20280A)),
+        Skin("guixiang", "桂香", "桂子飘香，月色温柔",
+            lp(0xFFFAF3E8, 0xFFFFFDF8, 0xFF2C2519, 0xFF6E6452, 0xFFA0957F, 0xFFC27C1A, 0xFF9A600F, 0xFFF8E7C9, 0xFFEEE5D4, 0xFFF4ECDD),
+            dp(0xFF0D1420, 0xFF141C2A, 0xFFE6EAF2, 0xFFA7B1C4, 0xFF717C90, 0xFFF0B460, 0xFFF5C986, 0xFF3A2C16, 0xFF1F2939, 0xFF18212F, 0xFF2A1800)),
+        Skin("haitang", "海棠", "海棠依旧，春色如许",
+            lp(0xFFFBF5F2, 0xFFFFFEFD, 0xFF30241F, 0xFF74625B, 0xFFA8968F, 0xFFD0574A, 0xFFA93F34, 0xFFFAE0DB, 0xFFF0E5E1, 0xFFF6EDEA),
+            dp(0xFF111417, 0xFF191D21, 0xFFEEE8E6, 0xFFB8ADA9, 0xFF847A77, 0xFFF28F82, 0xFFF6AEA4, 0xFF3E2420, 0xFF262A2F, 0xFF1E2226, 0xFF3A100A)),
+        Skin("yanyu", "檐雨", "檐下听雨，灯火可亲",
+            lp(0xFFEFF1EF, 0xFFFCFDFC, 0xFF20272A, 0xFF5B6669, 0xFF8F999B, 0xFF4D7470, 0xFF365855, 0xFFDCE9E6, 0xFFDEE3E2, 0xFFE8ECEB),
+            dp(0xFF0F1416, 0xFF161D20, 0xFFE3E9EA, 0xFFA2AFB2, 0xFF6E7B7E, 0xFFE6A955, 0xFFF0C07E, 0xFF3A2B16, 0xFF222A2D, 0xFF1A2124, 0xFF2A1800)),
+        Skin("guiyan", "归雁", "雁字回时，烟波浩渺",
+            lp(0xFFF6F3F0, 0xFFFFFEFD, 0xFF25262C, 0xFF63636E, 0xFF97979F, 0xFF5E6F93, 0xFF465574, 0xFFE2E7F2, 0xFFE8E5E2, 0xFFF0EDEA),
+            dp(0xFF0E1622, 0xFF15202E, 0xFFE3E9F2, 0xFFA3B0C3, 0xFF6F7C90, 0xFF9EB6DE, 0xFFBCCDEA, 0xFF1E2C44, 0xFF213044, 0xFF182434, 0xFF0C1830)),
     )
     val MODES = listOf("跟随系统", "浅色", "深色")
 
