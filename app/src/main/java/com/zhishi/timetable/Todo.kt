@@ -264,24 +264,63 @@ object TodoAlarm {
         } catch (x: Exception) {}
     }
 
-    /** 发一条通知（到点提醒和「测试通知」共用）。 */
+    /** 发一条通知（到点提醒和「测试通知」共用）。结果记进诊断。 */
     fun post(c: Context, notifId: Int, title: String, text: String) {
-        channel(c)
-        val open = PendingIntent.getActivity(c, notifId, Intent(c, MainActivity::class.java).putExtra("open", "todo")
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val n = android.app.Notification.Builder(c, CHANNEL)
-            .setSmallIcon(R.drawable.ic_stat_todo).setContentTitle(title).setContentText(text)
-            .setStyle(android.app.Notification.BigTextStyle().bigText(text))
-            .setCategory(android.app.Notification.CATEGORY_REMINDER).setShowWhen(true)
-            .setContentIntent(open).setAutoCancel(true).build()
-        try { c.getSystemService(NotificationManager::class.java)?.notify(notifId, n) } catch (x: SecurityException) {}
+        try {
+            channel(c)
+            val open = PendingIntent.getActivity(c, notifId, Intent(c, MainActivity::class.java).putExtra("open", "todo")
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+            val n = android.app.Notification.Builder(c, CHANNEL)
+                .setSmallIcon(R.drawable.ic_stat_todo).setContentTitle(title).setContentText(text)
+                .setStyle(android.app.Notification.BigTextStyle().bigText(text))
+                .setCategory(android.app.Notification.CATEGORY_REMINDER).setShowWhen(true)
+                .setContentIntent(open).setAutoCancel(true).build()
+            val nm = c.getSystemService(NotificationManager::class.java)
+            if (nm == null) { log(c, "post", "no NotificationManager"); return }
+            nm.notify(notifId, n)
+            log(c, "post", "ok" + (if (!nm.areNotificationsEnabled()) " (notifications disabled)" else ""))
+        } catch (x: Throwable) { log(c, "post", "error " + x.javaClass.simpleName + ": " + x.message) }
     }
+    fun postNow(c: Context) = post(c, 0x7e58, tr("测试提醒"), tr("能看到这条，说明知时的通知是通的。"))
+
+    /** 诊断：记下最近一次闹钟 / 发通知的时间和结果，界面上「提醒诊断」显示，可复制给开发者。 */
+    private fun diag(c: Context) = c.getSharedPreferences("todo_diag", Context.MODE_PRIVATE)
+    fun log(c: Context, what: String, res: String) {
+        try { diag(c).edit().putString(what, res).putLong(what + "At", System.currentTimeMillis()).apply() } catch (x: Throwable) {}
+    }
+    private fun fmt(ms: Long) = if (ms <= 0) "-" else java.text.SimpleDateFormat("MM-dd HH:mm:ss", java.util.Locale.US).format(java.util.Date(ms))
+    fun report(c: Context): String {
+        val l = mutableListOf<String>()
+        fun yn(b: Boolean) = if (b) tr("是") else tr("否")
+        try {
+            val nm = c.getSystemService(NotificationManager::class.java)
+            l += tr("系统通知开关") + ": " + yn(nm?.areNotificationsEnabled() == true)
+            l += tr("通知权限") + ": " + yn(canNotify(c))
+            val ch = nm?.getNotificationChannel(CHANNEL)
+            l += tr("提醒通知类别") + ": " + (ch?.let { "importance " + it.importance + (if (it.importance == NotificationManager.IMPORTANCE_NONE) " (" + tr("已关闭") + ")" else "") } ?: tr("还没建"))
+            l += tr("精确闹钟") + ": " + yn(exactOk(c))
+            val pm = c.getSystemService(android.os.PowerManager::class.java)
+            l += tr("忽略电池优化") + ": " + yn(pm?.isIgnoringBatteryOptimizations(c.packageName) == true)
+            if (Build.VERSION.SDK_INT >= 28) l += tr("后台受限") + ": " + yn(c.getSystemService(android.app.ActivityManager::class.java)?.isBackgroundRestricted == true)
+            val now = System.currentTimeMillis()
+            val next = TodoStore.all(c).filter { !wasFired(c, it) }.mapNotNull { t -> Todos.alarmAt(t, now)?.let { it to t } }.minByOrNull { it.first }
+            l += tr("下一条提醒") + ": " + (next?.let { fmt(it.first) + " " + (if (pi(c, it.second.id, false) != null) tr("已排上") else tr("没排上")) } ?: tr("没有"))
+            l += tr("测试闹钟") + ": " + (if (pi(c, TEST_ID, false) != null) tr("已排上") else tr("没有"))
+            val d = diag(c)
+            l += tr("最近一次闹钟") + ": " + fmt(d.getLong("alarmAt", 0)) + " " + d.getString("alarm", "")
+            l += tr("最近一次发通知") + ": " + fmt(d.getLong("postAt", 0)) + " " + d.getString("post", "")
+            l += "Android " + Build.VERSION.SDK_INT + " · " + Build.MANUFACTURER + " " + Build.MODEL + " · v" + BuildConfig.VERSION_CODE
+        } catch (x: Throwable) { l += "error " + x.javaClass.simpleName + ": " + x.message }
+        return l.joinToString("\n")
+    }
+
     /** 测试通知：走和真提醒一样的闹钟，1 分钟后从后台发出，这样锁屏 / 回桌面也能验证后台提醒通不通。 */
     const val TEST_ID = "__test__"
     fun test(c: Context) {
         val am = c.getSystemService(AlarmManager::class.java) ?: return
         val p = pi(c, TEST_ID, true) ?: return
         val at = System.currentTimeMillis() + 60_000L
+        log(c, "test", "scheduled " + fmt(at))
         try {
             if (exactOk(c)) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p)
             else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p)
@@ -308,12 +347,18 @@ class TodoReminder : BroadcastReceiver() {
             // 改时间 / 改时区：全天待办的提醒（当天 8:00）按新时区重排
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> { TodoAlarm.rescheduleAll(c); return }
         }
-        val id = i.getStringExtra("id") ?: return
-        if (id == TodoAlarm.TEST_ID) { if (TodoAlarm.canNotify(c)) TodoAlarm.postTest(c); return }
-        val t = TodoStore.all(c).firstOrNull { it.id == id } ?: return
-        if (t.done || !t.remind || !TodoAlarm.canNotify(c)) return
+        val id = i.getStringExtra("id") ?: run { TodoAlarm.log(c, "alarm", "no id"); return }
+        if (id == TodoAlarm.TEST_ID) {
+            TodoAlarm.log(c, "alarm", "test")
+            if (TodoAlarm.canNotify(c)) TodoAlarm.postTest(c) else TodoAlarm.log(c, "post", "skipped: no permission")
+            return
+        }
+        val t = TodoStore.all(c).firstOrNull { it.id == id } ?: run { TodoAlarm.log(c, "alarm", "todo gone"); return }
+        TodoAlarm.log(c, "alarm", "todo")
+        if (t.done || !t.remind) { TodoAlarm.log(c, "post", "skipped: done/off"); return }
+        if (!TodoAlarm.canNotify(c)) { TodoAlarm.log(c, "post", "skipped: no permission"); return }
         val now = System.currentTimeMillis()
-        if (TodoAlarm.wasFired(c, t)) return
+        if (TodoAlarm.wasFired(c, t)) { TodoAlarm.log(c, "post", "skipped: already fired"); return }
         val dueLine = if (Todos.endOf(t) <= now) tr("到截止时间了") else tr("截止：{0}", dueText(t.due, t.allDay))
         val text = listOf(dueLine, t.course, t.note).filter { it.isNotBlank() }.joinToString(" · ")
         TodoAlarm.markFired(c, t)

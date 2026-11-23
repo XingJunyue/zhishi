@@ -190,9 +190,11 @@ class TodoTest {
         assertTrue(txt.contains("待办") && txt.contains("日历"))
     }
 
-    @Test fun whatsNewNewestIsWidget19() {
-        assertEquals("widget19", Tour.WHATS_NEW.first().id)
-        val w = Tour.WHATS_NEW.first().pages.joinToString { it.title + it.body }
+    @Test fun whatsNewNewestIsDiag20() {
+        assertEquals("diag20", Tour.WHATS_NEW.first().id)
+        val dg = Tour.WHATS_NEW.first().pages.joinToString { it.title + it.body }
+        assertTrue(dg.contains("提醒诊断") && dg.contains("测试通知"))
+        val w = Tour.WHATS_NEW.first { it.id == "widget19" }.pages.joinToString { it.title + it.body }
         assertTrue(w.contains("小部件") && w.contains("自启动") && w.contains("还剩"))
         val n = Tour.WHATS_NEW.first { it.id == "notify18" }.pages.joinToString { it.title + it.body }
         assertTrue(n.contains("待办") && n.contains("提醒") && n.contains("测试通知") && n.contains("自启动"))
