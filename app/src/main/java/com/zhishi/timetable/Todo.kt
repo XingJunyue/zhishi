@@ -276,7 +276,18 @@ object TodoAlarm {
             .setContentIntent(open).setAutoCancel(true).build()
         try { c.getSystemService(NotificationManager::class.java)?.notify(notifId, n) } catch (x: SecurityException) {}
     }
-    fun test(c: Context) = post(c, 0x7e57, tr("测试提醒"), tr("能看到这条，说明知时的通知是通的。"))
+    /** 测试通知：走和真提醒一样的闹钟，1 分钟后从后台发出，这样锁屏 / 回桌面也能验证后台提醒通不通。 */
+    const val TEST_ID = "__test__"
+    fun test(c: Context) {
+        val am = c.getSystemService(AlarmManager::class.java) ?: return
+        val p = pi(c, TEST_ID, true) ?: return
+        val at = System.currentTimeMillis() + 60_000L
+        try {
+            if (exactOk(c)) am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p)
+            else am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p)
+        } catch (x: SecurityException) { am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, p) }
+    }
+    fun postTest(c: Context) = post(c, 0x7e57, tr("测试提醒"), tr("能看到这条，说明知时在后台也能准时提醒。"))
 
     fun canNotify(c: Context) = Build.VERSION.SDK_INT < 33 ||
         c.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) == PackageManager.PERMISSION_GRANTED
@@ -298,6 +309,7 @@ class TodoReminder : BroadcastReceiver() {
             Intent.ACTION_BOOT_COMPLETED, Intent.ACTION_MY_PACKAGE_REPLACED, Intent.ACTION_TIME_CHANGED, Intent.ACTION_TIMEZONE_CHANGED -> { TodoAlarm.rescheduleAll(c); return }
         }
         val id = i.getStringExtra("id") ?: return
+        if (id == TodoAlarm.TEST_ID) { if (TodoAlarm.canNotify(c)) TodoAlarm.postTest(c); return }
         val t = TodoStore.all(c).firstOrNull { it.id == id } ?: return
         if (t.done || !t.remind || !TodoAlarm.canNotify(c)) return
         val now = System.currentTimeMillis()

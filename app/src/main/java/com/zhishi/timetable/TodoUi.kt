@@ -242,9 +242,9 @@ fun TodoSheet(start: Todo, isNew: Boolean, onSave: (Todo) -> Unit, onDelete: () 
                     Text(tr("收不到提醒？在系统设置里给知时打开「自启动」，省电策略选「无限制」。小米、华为、OPPO 等手机默认会拦后台提醒。"),
                         fontSize = 12.sp, color = C.Faint, lineHeight = 18.sp, modifier = Modifier.padding(top = 8.dp))
                     FlowRowLite {
-                        CourseChip(tr("发一条测试通知"), false) {
+                        CourseChip(tr("1 分钟后发测试通知"), false) {
                             if (Build.VERSION.SDK_INT >= 33 && !TodoAlarm.canNotify(c)) perm.launch(Manifest.permission.POST_NOTIFICATIONS)
-                            else { TodoAlarm.test(c); hint = tr("已发出测试通知，看看通知栏有没有。") }
+                            else { TodoAlarm.test(c); hint = tr("1 分钟后会发一条测试通知。可以先锁屏或回到桌面，看它能不能弹出来。") }
                         }
                         CourseChip(tr("通知与自启动设置"), false) {
                             try {
