@@ -189,6 +189,7 @@ fun WidgetScreen() {
         WidgetCard(tr("课表 2×2"), false, canPin) { pin(CourseWidget2::class.java) }
         tip?.let { Note(it) }
         Note(tr("小部件上的「重要 / 普通 / 水课」标签可以在「设置 → 学期与显示」里关掉。"))
+        Note(tr("小部件上的时间不走？在系统设置里给知时打开「自启动」，省电策略选「无限制」：从后台划掉知时后，小米等手机会停掉小部件的刷新。"))
         Spacer(Modifier.height(40.dp))
     }
 }

@@ -68,7 +68,7 @@ object CourseWidgets {
 
     /**
      * 安排下一次重画：今天还有课（上课中要显示剩余时间）就在下一分钟，没课了就到明天 0 点。
-     * 用不唤醒的闹钟：息屏时不重画，亮屏后系统补发，再接着排。
+     * 用不唤醒的精确闹钟：息屏时不重画，亮屏后系统补发，再接着排。
      */
     private fun schedule(c: Context, today: List<Slot>, hasWidgets: Boolean) {
         val am = c.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager ?: return
@@ -79,7 +79,13 @@ object CourseWidgets {
         val m = Term.nowMin()
         if (today.any { it.to > m }) { k.add(java.util.Calendar.MINUTE, 1); k.set(java.util.Calendar.SECOND, 0); k.set(java.util.Calendar.MILLISECOND, 0) }
         else { k.add(java.util.Calendar.DAY_OF_YEAR, 1); k.set(java.util.Calendar.HOUR_OF_DAY, 0); k.set(java.util.Calendar.MINUTE, 0); k.set(java.util.Calendar.SECOND, 5) }
-        am.set(android.app.AlarmManager.RTC, k.timeInMillis, pi)
+        // 不唤醒（息屏不重画，亮屏后补发）但要准：以前用 set() 是不精确的，澎湃OS 会把它攒着拖很久，桌面上的「x 分钟后 / 还剩」就停住了
+        try {
+            if (TodoAlarm.exactOk(c)) am.setExact(android.app.AlarmManager.RTC, k.timeInMillis, pi)
+            else am.setWindow(android.app.AlarmManager.RTC, k.timeInMillis, 10_000L, pi)
+        } catch (x: SecurityException) {
+            am.setWindow(android.app.AlarmManager.RTC, k.timeInMillis, 10_000L, pi)
+        }
     }
 
     fun update(c: Context, force: Boolean = true) {
