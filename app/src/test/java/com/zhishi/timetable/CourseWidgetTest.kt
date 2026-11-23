@@ -30,4 +30,36 @@ class CourseWidgetTest {
     @Test fun styleNorm() {
         assertEquals("glass", WidgetStyle.norm(null)); assertEquals("glass", WidgetStyle.norm("x")); assertEquals("classic", WidgetStyle.norm("classic"))
     }
+
+    // 待办小部件：过期的在前，再今天、之后、没设截止；全做完 / 一条没有分得开
+    private val tz = java.util.TimeZone.getTimeZone("Asia/Shanghai")
+    private val d0 = 20_413L
+    @Test fun todoOrder() {
+        val now = Todos.at(d0, 700, tz)
+        val l = listOf(
+            Todo("nod", "没时间", created = 1),
+            Todo("later", "之后", due = Todos.at(d0 + 2, 600, tz), created = 2),
+            Todo("late", "过期", due = Todos.at(d0, 600, tz), created = 3),
+            Todo("today", "今天", due = Todos.at(d0, 900, tz), created = 4),
+            Todo("done", "完成", done = true, doneAt = 5, created = 5),
+        )
+        val p = CourseWidgets.todoPlan(l, now, tz)
+        assertEquals(listOf("late", "today", "later", "nod"), p.list.map { it.id })
+        assertEquals(1, p.overdue); assertEquals(1, p.today); assertFalse(p.allDone)
+        assertEquals(listOf(0, 1, 2, 3), p.list.map { CourseWidgets.todoState(it, now, tz) })
+        assertTrue(CourseWidgets.todoPlan(listOf(l[4]), now, tz).allDone)
+        assertFalse(CourseWidgets.todoPlan(emptyList(), now, tz).allDone)
+    }
+    @Test fun nextTick() {
+        val now = Todos.at(d0, 700, tz) + 20_000L
+        val midnight = Todos.at(d0 + 1, 0, tz) + 5_000L
+        assertNull(CourseWidgets.nextTick(now, false, emptyList(), 700, false, emptyList(), tz))
+        // 只有待办小部件：最近一条到截止就重画，没有就到 0 点
+        val t = Todo("a", "x", due = Todos.at(d0, 900, tz))
+        assertEquals(Todos.at(d0, 900, tz) + 1_000L, CourseWidgets.nextTick(now, false, emptyList(), 700, true, listOf(t), tz))
+        assertEquals(midnight, CourseWidgets.nextTick(now, false, emptyList(), 700, true, listOf(t.copy(done = true)), tz))
+        // 课表小部件今天还有课：下一分钟
+        assertEquals(Todos.at(d0, 701, tz), CourseWidgets.nextTick(now, true, listOf(s("物理", 480, 760)), 700, true, listOf(t), tz))
+        assertEquals(midnight, CourseWidgets.nextTick(now, true, listOf(s("物理", 480, 575)), 700, false, emptyList(), tz))
+    }
 }

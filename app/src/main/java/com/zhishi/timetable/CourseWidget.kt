@@ -67,49 +67,81 @@ object CourseWidgets {
     fun safeUpdate(c: Context) { try { update(c) } catch (x: Throwable) {} }
 
     /**
-     * 安排下一次重画：今天还有课（上课中要显示剩余时间）就在下一分钟，没课了就到明天 0 点。
+     * 安排下一次重画（时刻由 [nextTick] 算）：课表小部件今天还有课（上课中要显示剩余时间）就在下一分钟，没课了就到明天 0 点；
+     * 待办小部件在最近一条待办到截止（变成「已过期」）或明天 0 点（「今天 / 明天」换天）重画。null = 不用再排。
      * 用不唤醒的精确闹钟：息屏时不重画，亮屏后系统补发，再接着排。
      */
-    private fun schedule(c: Context, today: List<Slot>, hasWidgets: Boolean) {
+    private fun schedule(c: Context, at: Long?) {
         val am = c.getSystemService(Context.ALARM_SERVICE) as? android.app.AlarmManager ?: return
         val pi = PendingIntent.getBroadcast(c, 11, Intent(c, WidgetTick::class.java).setAction(WidgetTick.ACTION),
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        if (!hasWidgets) { am.cancel(pi); return }
-        val k = java.util.Calendar.getInstance()
-        val m = Term.nowMin()
-        if (today.any { it.to > m }) { k.add(java.util.Calendar.MINUTE, 1); k.set(java.util.Calendar.SECOND, 0); k.set(java.util.Calendar.MILLISECOND, 0) }
-        else { k.add(java.util.Calendar.DAY_OF_YEAR, 1); k.set(java.util.Calendar.HOUR_OF_DAY, 0); k.set(java.util.Calendar.MINUTE, 0); k.set(java.util.Calendar.SECOND, 5) }
-        // 不唤醒（息屏不重画，亮屏后补发）但要准：以前用 set() 是不精确的，澎湃OS 会把它攒着拖很久，桌面上的「x 分钟后 / 还剩」就停住了
+        if (at == null) { am.cancel(pi); return }
+        // 不唤醒（息屏不重画，亮屏后补发）但要准：以前用 set() 是不精确的，有的系统会把它攒着拖很久，桌面上的「x 分钟后 / 还剩」就停住了
         try {
-            if (TodoAlarm.exactOk(c)) am.setExact(android.app.AlarmManager.RTC, k.timeInMillis, pi)
-            else am.setWindow(android.app.AlarmManager.RTC, k.timeInMillis, 10_000L, pi)
+            if (TodoAlarm.exactOk(c)) am.setExact(android.app.AlarmManager.RTC, at, pi)
+            else am.setWindow(android.app.AlarmManager.RTC, at, 10_000L, pi)
         } catch (x: SecurityException) {
-            am.setWindow(android.app.AlarmManager.RTC, k.timeInMillis, 10_000L, pi)
+            am.setWindow(android.app.AlarmManager.RTC, at, 10_000L, pi)
         }
+    }
+
+    /** 下一次该重画的时刻（纯函数，单测）。course / todo = 桌面上有没有这种小部件。 */
+    fun nextTick(now: Long, course: Boolean, today: List<Slot>, nowMin: Int, todo: Boolean, todos: List<Todo>,
+                 tz: java.util.TimeZone = java.util.TimeZone.getDefault()): Long? {
+        if (!course && !todo) return null
+        val midnight = Todos.at(Todos.dayOfMs(now, tz) + 1, 0, tz) + 5_000L
+        var at = midnight
+        if (course && today.any { it.to > nowMin }) at = minOf(at, (now / 60_000L + 1) * 60_000L)
+        if (todo) todos.filter { !it.done && it.due >= 0 }.map { Todos.endOf(it, tz) }.filter { it > now }.minOrNull()?.let { at = minOf(at, it + 1_000L) }
+        return at
     }
 
     fun update(c: Context, force: Boolean = true) {
         val m = AppWidgetManager.getInstance(c) ?: return
         val big = m.getAppWidgetIds(ComponentName(c, CourseWidget4::class.java))
         val small = m.getAppWidgetIds(ComponentName(c, CourseWidget2::class.java))
-        if (big.isEmpty() && small.isEmpty()) { schedule(c, emptyList(), false); return }
-        val list = today(c)
-        schedule(c, list, true)
-        val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.desired(c).hashCode()}|${Term.widgetLevel(c)}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${WidgetStyle.tint(c)}|${WidgetStyle.clear(c)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
+        val tBig = m.getAppWidgetIds(ComponentName(c, TodoWidget4::class.java))
+        val tSmall = m.getAppWidgetIds(ComponentName(c, TodoWidget2::class.java))
+        val hasCourse = big.isNotEmpty() || small.isNotEmpty()
+        val hasTodo = tBig.isNotEmpty() || tSmall.isNotEmpty()
+        if (!hasCourse && !hasTodo) { schedule(c, null); return }
+        val list = if (hasCourse) today(c) else emptyList()
+        val todos = if (hasTodo) TodoStore.all(c) else emptyList()
+        val nowMs = System.currentTimeMillis()
+        schedule(c, nextTick(nowMs, hasCourse, list, Term.nowMin(), hasTodo, todos))
+        val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.desired(c).hashCode()}|${todos.hashCode()}|${todoPlan(todos, nowMs).overdue}|${Term.widgetLevel(c)}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${WidgetStyle.tint(c)}|${WidgetStyle.clear(c)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
         if (!force && sig == lastSig) return
         lastSig = sig
-        val now = plan(list, Term.nowMin())
         val all = Term.desired(c).filter { it.kind == "course" }
-        for ((ids, wide) in listOf(big to true, small to false)) for (id in ids) {
-            try {
-                val o = m.getAppWidgetOptions(id)
-                val v = RemoteViews(c.packageName, R.layout.widget_course)
-                v.setImageViewBitmap(R.id.canvas, draw(c, wide, o, now, all))
-                v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(c, 7,
-                    Intent(c, MainActivity::class.java).putExtra("open", "table").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-                    PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-                m.updateAppWidget(id, v)
-            } catch (x: Exception) { android.util.Log.w("Zhishi", "课表小部件画不出来：${x.message}") }
+        if (hasCourse) {
+            val now = plan(list, Term.nowMin())
+            for ((ids, wide) in listOf(big to true, small to false)) for (id in ids) {
+                try {
+                    val o = m.getAppWidgetOptions(id)
+                    val v = RemoteViews(c.packageName, R.layout.widget_course)
+                    v.setImageViewBitmap(R.id.canvas, draw(c, wide, o, now, all))
+                    v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(c, 7,
+                        Intent(c, MainActivity::class.java).putExtra("open", "table").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+                    m.updateAppWidget(id, v)
+                } catch (x: Exception) { android.util.Log.w("Zhishi", "课表小部件画不出来：${x.message}") }
+            }
+        }
+        if (hasTodo) {
+            val tp = todoPlan(todos, nowMs)
+            // 点一下打开待办页；一条待办都没有时直接打开「添加待办」
+            val empty = tp.list.isEmpty()
+            for ((ids, wide) in listOf(tBig to true, tSmall to false)) for (id in ids) {
+                try {
+                    val o = m.getAppWidgetOptions(id)
+                    val v = RemoteViews(c.packageName, R.layout.widget_course)
+                    v.setImageViewBitmap(R.id.canvas, drawTodo(c, wide, o, tp, all))
+                    v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(c, if (empty) 9 else 8,
+                        Intent(c, MainActivity::class.java).putExtra("open", if (empty) "todo:1" else "todo").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+                    m.updateAppWidget(id, v)
+                } catch (x: Exception) { android.util.Log.w("Zhishi", "待办小部件画不出来：${x.message}") }
+            }
         }
     }
 
@@ -155,7 +187,161 @@ object CourseWidgets {
         return draw(c, wide, null, now, all)
     }
 
-    private fun draw(c: Context, wide: Boolean, o: Bundle?, now: Now, all: List<Slot>): Bitmap {
+    // ---------------- 待办小部件 ----------------
+
+    /** 待办小部件此刻要显示的：没完成的待办，已过期的在前，再今天、之后、没设截止的（和待办页同一顺序）。 */
+    data class TodoNow(val list: List<Todo>, val overdue: Int, val today: Int, val allDone: Boolean, val now: Long)
+
+    fun todoPlan(all: List<Todo>, now: Long, tz: java.util.TimeZone = java.util.TimeZone.getDefault()): TodoNow {
+        val g = Todos.group(all, now, tz)
+        val l = g.overdue + g.today + g.upcoming
+        return TodoNow(l, g.overdue.size, g.today.size, l.isEmpty() && g.done.isNotEmpty(), now)
+    }
+
+    /** 一条待办的状态：0 已过期、1 今天、2 之后、3 没设截止。 */
+    fun todoState(t: Todo, now: Long, tz: java.util.TimeZone = java.util.TimeZone.getDefault()): Int = when {
+        t.due < 0 -> 3
+        Todos.overdue(t, now, tz) -> 0
+        Todos.dayOf(t, tz) == Todos.dayOfMs(now, tz) -> 1
+        else -> 2
+    }
+
+    /** 小部件页的实时预览：和桌面上画法完全一样；没有待办时用几条示例。 */
+    fun previewTodo(c: Context, wide: Boolean): Bitmap {
+        val now = System.currentTimeMillis()
+        var tp = todoPlan(TodoStore.all(c), now)
+        if (tp.list.isEmpty()) {
+            val day = Todos.dayOfMs(now)
+            tp = todoPlan(listOf(
+                Todo("demo1", tr("交高数作业 第三章"), tr("习题 3.1–3.4"), Todos.at(day, 23 * 60 + 30), course = tr("高等数学"), created = 1),
+                Todo("demo2", tr("实验报告"), "", Todos.at(day + 1, 18 * 60), created = 2),
+                Todo("demo3", tr("背单词"), "", -1L, created = 3),
+            ), now)
+        }
+        return drawTodo(c, wide, null, tp, Term.desired(c).filter { it.kind == "course" })
+    }
+
+    /** 左边竖条的颜色：关联了课就用那门课的颜色，否则已过期用「重要」的暖色、其余用主色。 */
+    private fun todoBar(t: Todo, state: Int, all: List<Slot>): Pair<Int, Int> {
+        val s = if (t.course.isBlank()) null else all.firstOrNull { it.name.trim() == t.course.trim() }
+        if (s != null) return courseToneArgb(courseColorArgb(s, all), PAL)
+        return if (state == 0) LevelTag.bg(2, DARK) to LevelTag.fg(2, DARK) else ACC_PALE to ACC
+    }
+
+    /** 状态标签：文字、字色、底色。 */
+    private fun todoChip(state: Int): Triple<String, Int, Int> = when (state) {
+        0 -> Triple(tr("已过期"), LevelTag.fg(2, DARK), LevelTag.bg(2, DARK))
+        1 -> Triple(tr("今天"), ON_ACC, ACC)
+        2 -> Triple(tr("即将"), ACC, ACC_PALE)
+        else -> Triple(tr("待办"), ACC, ACC_PALE)
+    }
+
+    private fun todoDue(t: Todo): String = if (t.due < 0) tr("没有截止时间") else dueText(t.due, t.allDay)
+
+    private fun todoWide(c: Context, d: D, w: Float, h: Float, tp: TodoNow, all: List<Slot>) {
+        val t = tp.list[0]; val p = 15f; val L = p; val R = w - p
+        val st = todoState(t, tp.now)
+        d.text(header() + " · " + tr("待办"), L, 11f, 11f, SUB, maxW = w * 0.55f)
+        val right = (if (tp.overdue > 0) tr("已过期 {0} 项", tp.overdue) + " · " else "") + tr("共 {0} 项", tp.list.size)
+        d.text(right, R, 11f, 11f, if (tp.overdue > 0) LevelTag.fg(2, DARK) else SUB, align = 2, maxW = w * 0.42f)
+        val next = tp.list.getOrNull(1)
+        val nextH = if (next != null) 46f else 0f
+        val top = 33f
+        val bottom = h - p - (if (next != null) nextH + 10f else 0f)
+        val (_, deepC) = todoBar(t, st, all)
+        d.round(L, top + 2f, L + 4f, bottom - 2f, 2f, deepC)
+        val cx = L + 12f
+        val (ct, cf, cb) = todoChip(st)
+        val cr = R - d.chip(ct, R, top + 1f, 9.5f, cf, cb, true, right = true) - 6f
+        d.text(t.title, cx, top - 2f, 17f, INK, true, maxW = cr - cx - 4f)
+        // 截止时间 · 关联课程
+        val f = 11f; var x = cx; val y = top + 25f
+        d.clock(x, y + 1.5f, if (st == 0) LevelTag.fg(2, DARK) else SUB); x += 14f
+        x += d.text(todoDue(t), x, y - 1f, f, if (st == 0) LevelTag.fg(2, DARK) else INK, maxW = R - x) + 14f
+        if (t.course.isNotBlank() && x < R - 40f) { d.book(x, y + 1f, SUB); x += 14f; d.text(t.course, x, y - 1f, f, INK, maxW = R - x) }
+        if (t.note.isNotBlank() && bottom - (top + 44f) >= 12f) d.text(t.note, cx, top + 43f, 10.5f, SUB, maxW = R - cx)
+        // 接下来的一条
+        if (next != null) {
+            val ny = h - p - nextH
+            d.glass(L, ny, R, h - p, 14f, NEXT_BG, WallTint.innerAlpha(CLEAR, DARK))
+            val q = L + 11f
+            val nst = todoState(next, tp.now)
+            d.text(tr("接下来 · 还有 {0} 项", tp.list.size - 1), q, ny + 6f, 10f, NEXT_FG, true, maxW = w * 0.5f)
+            d.text(todoDue(next), R - 11f, ny + 6f, 10f, if (nst == 0) LevelTag.fg(2, DARK) else NEXT_FG, align = 2, maxW = w * 0.4f)
+            val iw = if (next.course.isEmpty()) 0f else minOf(d.width(next.course, 10.5f), (R - q) * 0.4f)
+            d.text(next.title, q, ny + 22f, 12.5f, INK, true, maxW = R - 11f - q - iw - 10f)
+            if (next.course.isNotEmpty()) d.text(next.course, R - 11f, ny + 24f, 10.5f, SUB, align = 2, maxW = iw)
+        }
+    }
+
+    private fun todoSmall(c: Context, d: D, w: Float, h: Float, tp: TodoNow, all: List<Slot>) {
+        val t = tp.list[0]; val p = 13f; val L = p; val R = w - p
+        val st = todoState(t, tp.now)
+        val (ct, cf, cb) = todoChip(st)
+        d.chip(ct, L, p - 2f, 9f, cf, cb, true)
+        d.text(tr("共 {0} 项", tp.list.size), R, p + 1.5f, 9.5f, if (tp.overdue > 0) LevelTag.fg(2, DARK) else ACC, align = 2)
+        val top = 37f
+        val (_, deepC) = todoBar(t, st, all)
+        d.round(L, top + 2f, L + 4f, top + 46f, 2f, deepC)
+        val cx = L + 10f
+        d.text(t.title, cx, top - 3f, 15f, INK, true, maxW = R - cx)
+        d.text(todoDue(t), cx, top + 17f, 10.5f, if (st == 0) LevelTag.fg(2, DARK) else INK, maxW = R - cx)
+        val info = listOf(t.course, t.note).filter { it.isNotBlank() }.joinToString(" · ")
+        if (info.isNotEmpty()) d.text(info, cx, top + 31f, 10.5f, SUB, maxW = R - cx)
+        val ny = top + 55f
+        val nb = h - p
+        if (nb - ny < 26f) return
+        d.glass(L, ny, R, nb, 13f, NEXT_BG, WallTint.innerAlpha(CLEAR, DARK))
+        val nx = tp.list.getOrNull(1)
+        val cy = ny + (nb - ny) / 2
+        if (nx == null) { d.text(tr("只剩这一项啦"), (L + R) / 2, cy - 7f, 10f, NEXT_FG, true, 1, R - L - 12f); return }
+        d.text(tr("接下来") + " · " + todoDue(nx), L + 9f, cy - 15f, 9f, NEXT_FG, true, maxW = R - L - 18f)
+        d.text(nx.title, L + 9f, cy - 1f, 11.5f, INK, true, maxW = R - L - 18f)
+    }
+
+    private fun todoFree(d: D, w: Float, h: Float, wide: Boolean, done: Boolean) {
+        val day = Term.todayEpoch().toInt()
+        val kao = if (done) KAO_DONE[Math.floorMod(day, KAO_DONE.size)] else KAO[Math.floorMod(day, KAO.size)]
+        val title = if (done) tr("待办都做完啦") else tr("还没有待办")
+        val pink = 0xFFFF8AAA.toInt(); val yel = 0xFFFFCE5C.toInt(); val mint = 0xFF84D6BE.toInt(); val lav = 0xFFB2A0F0.toInt()
+        val cx = w / 2
+        if (wide) {
+            d.text(header() + " · " + tr("待办"), 15f, 12f, 11f, SUB)
+            d.text(kao, cx, h * 0.40f - 14f, 22f, pink, true, 1, w - 40f)
+            d.text(title, cx, h * 0.65f - 12f, 18f, INK, true, 1)
+            d.text(if (done) tr("辛苦啦，好好放松一下 ♡") else tr("点一下记一条待办 ♡"), cx, h * 0.82f - 7f, 11f, SUB, align = 1)
+            for (s in listOf(floatArrayOf(.14f, .52f, 8f), floatArrayOf(.20f, .78f, 5f), floatArrayOf(.84f, .28f, 7f), floatArrayOf(.88f, .64f, 9f), floatArrayOf(.78f, .86f, 5f), floatArrayOf(.27f, .27f, 5f)).withIndex())
+                d.spark(w * s.value[0], h * s.value[1], s.value[2], listOf(yel, mint, lav, pink, yel, pink)[s.index])
+        } else {
+            d.text(kao, cx, h * 0.36f - 11f, 17f, pink, true, 1, w - 24f)
+            d.text(title, cx, h * 0.60f - 10f, 15f, INK, true, 1, w - 20f)
+            d.text(if (done) tr("辛苦啦 ♡") else tr("点一下添加 ♡"), cx, h * 0.77f - 6f, 10f, SUB, align = 1)
+            for (s in listOf(floatArrayOf(.15f, .16f, 6f), floatArrayOf(.85f, .19f, 5f), floatArrayOf(.13f, .87f, 4f), floatArrayOf(.87f, .85f, 7f)).withIndex())
+                d.spark(w * s.value[0], h * s.value[1], s.value[2], listOf(yel, lav, mint, pink)[s.index])
+        }
+    }
+
+    private fun draw(c: Context, wide: Boolean, o: Bundle?, now: Now, all: List<Slot>): Bitmap =
+        canvasFor(c, wide, o, now.main == null) { d, lw, lh ->
+            when {
+                now.main == null -> freeCard(d, lw, lh, wide, now.doneAll)
+                wide -> wideCard(c, d, lw, lh, now, all)
+                else -> smallCard(c, d, lw, lh, now, all)
+            }
+        }
+
+    /** 待办小部件：和课表小部件同一张底（样式、玻璃、透明度、皮肤 / 壁纸配色、尺寸都一样），只是内容不同。 */
+    private fun drawTodo(c: Context, wide: Boolean, o: Bundle?, tp: TodoNow, all: List<Slot>): Bitmap =
+        canvasFor(c, wide, o, tp.list.isEmpty()) { d, lw, lh ->
+            when {
+                tp.list.isEmpty() -> todoFree(d, lw, lh, wide, tp.allDone)
+                wide -> todoWide(c, d, lw, lh, tp, all)
+                else -> todoSmall(c, d, lw, lh, tp, all)
+            }
+        }
+
+    /** 画一张小部件：底（经典 / 液态玻璃）画好后交给 body 画内容，画布单位 = 设计稿 dp。free = 空状态（经典样式用白卡底）。 */
+    private fun canvasFor(c: Context, wide: Boolean, o: Bundle?, free: Boolean, body: (D, Float, Float) -> Unit): Bitmap {
         usePal(c)
         val dm = c.resources.displayMetrics
         val (wDp, hDp) = sizeDp(c, o, wide)
@@ -169,7 +355,6 @@ object CourseWidgets {
         // 画布单位 = 设计稿 dp（lw × lh），铺满整张位图
         val cv = Canvas(b); cv.scale(scale * k, scale * k)
         val d = D(cv)
-        val free = now.main == null
         d.classic = CLASSIC
         if (CLASSIC) {
             // 经典样式（改成液态玻璃之前、build-9 的样子）：实心的皮肤底色 + 淡插画，字不加任何阴影
@@ -186,11 +371,7 @@ object CourseWidgets {
             // 质感照导航条里选中的水滴（滑块）：spec 1.3、内发光 0.12，和里面的小玻璃块一致
             glassShine(cv, lw, lh, R_CARD, 1.4f, spec = 1.3f, glow = 0.12f)
         }
-        when {
-            free -> freeCard(d, lw, lh, wide, now.doneAll)
-            wide -> wideCard(c, d, lw, lh, now, all)
-            else -> smallCard(c, d, lw, lh, now, all)
-        }
+        body(d, lw, lh)
         return b
     }
 
@@ -392,6 +573,13 @@ object CourseWidgets {
             cv.drawCircle(x + 4.5f, y + 2.6f, 2.5f, p)
             cv.drawArc(RectF(x, y + 5.6f, x + 9f, y + 15f), 180f, 180f, true, p)
         }
+        /** 小书本（待办关联的课）。 */
+        fun book(x: Float, y: Float, col: Int) {
+            p.style = Paint.Style.STROKE; p.strokeWidth = 1.2f; p.color = col; p.strokeJoin = Paint.Join.ROUND
+            cv.drawPath(Path().apply { moveTo(x + 5f, y + 2f); lineTo(x + 0.6f, y + 0.8f); lineTo(x + 0.6f, y + 8.6f); lineTo(x + 5f, y + 9.8f); lineTo(x + 9.4f, y + 8.6f); lineTo(x + 9.4f, y + 0.8f); close() }, p)
+            cv.drawLine(x + 5f, y + 2f, x + 5f, y + 9.8f, p)
+            p.style = Paint.Style.FILL
+        }
         fun spark(x: Float, y: Float, r: Float, col: Int) {
             p.style = Paint.Style.FILL; p.color = col
             val q = r * 0.28f
@@ -552,6 +740,17 @@ class CourseWidget4 : AppWidgetProvider() {
 }
 
 class CourseWidget2 : AppWidgetProvider() {
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
+    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
+}
+
+/** 待办小部件 4×2 / 2×2：和课表小部件同一套画法和刷新（CourseWidgets.update 一起重画）。 */
+class TodoWidget4 : AppWidgetProvider() {
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
+    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
+}
+
+class TodoWidget2 : AppWidgetProvider() {
     override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
     override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
 }

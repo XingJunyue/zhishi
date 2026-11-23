@@ -3,4 +3,7 @@
     <string name="w_course4_name">Zhishi · Stundenplan 4×2</string>
     <string name="w_course2_name">Zhishi · Stundenplan 2×2</string>
     <string name="w_course">Aktuelle und nächste Stunde heute</string>
+    <string name="w_todo4_name">Zhishi · Aufgaben 4×2</string>
+    <string name="w_todo2_name">Zhishi · Aufgaben 2×2</string>
+    <string name="w_todo">Anstehende Aufgaben nach Fälligkeit</string>
 </resources>

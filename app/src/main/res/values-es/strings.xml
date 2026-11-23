@@ -3,4 +3,7 @@
     <string name="w_course4_name">Zhishi · Horario 4×2</string>
     <string name="w_course2_name">Zhishi · Horario 2×2</string>
     <string name="w_course">La clase actual y la siguiente de hoy</string>
+    <string name="w_todo4_name">Zhishi · Tareas 4×2</string>
+    <string name="w_todo2_name">Zhishi · Tareas 2×2</string>
+    <string name="w_todo">Tus tareas pendientes, por fecha límite</string>
 </resources>

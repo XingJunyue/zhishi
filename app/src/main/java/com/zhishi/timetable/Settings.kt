@@ -153,7 +153,7 @@ fun SkinPicker() {
     Text(tr(cur.name) + " · " + tr(cur.poem), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(top = 8.dp, start = 4.dp))
 }
 
-/** 小部件页：两种课表小部件的样子，和「添加到桌面」。 */
+/** 小部件页：课表、待办小部件（各 4×2 / 2×2）的样子，和「添加到桌面」。 */
 @Composable
 fun WidgetScreen() {
     val c = LocalContext.current
@@ -187,6 +187,9 @@ fun WidgetScreen() {
         }
         WidgetCard(tr("课表 4×2"), true, canPin) { pin(CourseWidget4::class.java) }
         WidgetCard(tr("课表 2×2"), false, canPin) { pin(CourseWidget2::class.java) }
+        Note(tr("待办小部件：最近要做的一条在上面，下面是接下来的；按截止时间排，过期的在最前。添加、完成、删除待办后马上更新。"))
+        WidgetCard(tr("待办 4×2"), true, canPin, todo = true) { pin(TodoWidget4::class.java) }
+        WidgetCard(tr("待办 2×2"), false, canPin, todo = true) { pin(TodoWidget2::class.java) }
         tip?.let { Note(it) }
         Note(tr("小部件上的「重要 / 普通 / 水课」标签可以在「设置 → 学期与显示」里关掉。"))
         Note(tr("小部件上的时间不走？在系统设置里给知时允许「自启动 / 后台活动」，电池使用选「不限制」：不少安卓手机划掉 App 后会停掉小部件刷新。"))
@@ -195,11 +198,13 @@ fun WidgetScreen() {
 }
 
 @Composable
-private fun WidgetCard(title: String, wide: Boolean, canPin: Boolean, onPin: () -> Unit) {
+private fun WidgetCard(title: String, wide: Boolean, canPin: Boolean, todo: Boolean = false, onPin: () -> Unit) {
     val c = LocalContext.current
     var tick by remember { mutableStateOf(0) }
     Every(30_000) { tick++ }
-    val bmp = remember(tick, Skins.skinState.value, C.dark, WidgetStyle.ver.value, WallTint.ver.value) { try { CourseWidgets.preview(c, wide).asImageBitmap() } catch (x: Exception) { null } }
+    val bmp = remember(tick, Skins.skinState.value, C.dark, WidgetStyle.ver.value, WallTint.ver.value, TodoStore.ver.value) {
+        try { (if (todo) CourseWidgets.previewTodo(c, wide) else CourseWidgets.preview(c, wide)).asImageBitmap() } catch (x: Exception) { null }
+    }
     // 跟随壁纸时：预览底下垫一块按壁纸主色做的渐变（App 读不到壁纸本身，只能用它的颜色模拟）
     val wall = remember(WidgetStyle.ver.value, WallTint.ver.value) {
         if (!WidgetStyle.classic(c) && WidgetStyle.followWall(c)) WallTint.read(c) else null

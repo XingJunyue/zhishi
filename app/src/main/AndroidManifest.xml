@@ -35,6 +35,14 @@
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_course2" />
         </receiver>
+        <receiver android:name=".TodoWidget4" android:exported="false" android:label="@string/w_todo4_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_todo4" />
+        </receiver>
+        <receiver android:name=".TodoWidget2" android:exported="false" android:label="@string/w_todo2_name">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_todo2" />
+        </receiver>
         <!-- 小部件到点重画（下一分钟 / 上下课 / 0 点）；改时间、时区、开机后也重画 -->
         <receiver android:name=".WidgetTick" android:exported="false">
             <intent-filter>

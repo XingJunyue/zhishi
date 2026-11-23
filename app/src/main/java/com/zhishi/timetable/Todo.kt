@@ -200,12 +200,13 @@ object Todos {
     }
 }
 
-/** 存储：改了就通知界面（Compose 读 ver）并重排提醒。 */
+/** 存储：改了就通知界面（Compose 读 ver）、重画小部件，并重排提醒。 */
 object TodoStore {
     val ver = mutableStateOf(0)
     private fun p(c: Context) = c.getSharedPreferences("todo", Context.MODE_PRIVATE)
     fun all(c: Context): List<Todo> = Todos.parse(p(c).getString("items", "[]"))
-    fun save(c: Context, l: List<Todo>) { p(c).edit().putString("items", Todos.toJson(l).toString()).apply(); ver.value++ }
+    /** 存下来、通知界面，并立刻重画桌面上的待办小部件（添加 / 完成 / 删除 / 从备份恢复都走这里）。 */
+    fun save(c: Context, l: List<Todo>) { p(c).edit().putString("items", Todos.toJson(l).toString()).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
     fun put(c: Context, t: Todo) {
         val l = all(c); save(c, if (l.any { it.id == t.id }) l.map { if (it.id == t.id) t else it } else l + t)
         TodoAlarm.sync(c, t)
