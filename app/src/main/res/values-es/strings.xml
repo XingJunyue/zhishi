@@ -5,5 +5,5 @@
     <string name="w_course">La clase actual y la siguiente de hoy</string>
     <string name="w_todo4_name">Zhishi · Tareas 4×2</string>
     <string name="w_todo2_name">Zhishi · Tareas 2×2</string>
-    <string name="w_todo">Tus tareas pendientes, por fecha límite</string>
+    <string name="w_todo">Todas tus tareas por fecha límite; desliza dentro del widget</string>
 </resources>

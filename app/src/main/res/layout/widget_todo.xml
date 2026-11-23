@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 待办小部件：底图（玻璃卡 + 头部，或空状态）上面叠一个可以上下滑动的列表，行由 TodoWidgetService 提供 -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/root" android:layout_width="match_parent" android:layout_height="match_parent">
+    <ImageView android:id="@+id/canvas" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:scaleType="fitCenter" android:layout_gravity="center" android:src="@drawable/w_course_preview"/>
+    <ListView android:id="@+id/list" android:layout_width="match_parent" android:layout_height="match_parent"
+        android:divider="@null" android:dividerHeight="0dp" android:scrollbars="none"
+        android:listSelector="@android:color/transparent" android:cacheColorHint="#00000000"
+        android:requiresFadingEdge="vertical" android:fadingEdgeLength="10dp"
+        android:overScrollMode="never" android:visibility="gone"/>
+</FrameLayout>

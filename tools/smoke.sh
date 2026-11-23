@@ -102,6 +102,11 @@ adb logcat -d -s ZhishiTest | grep wallpaper | tail -3
 go table:8; sleep 3; adb shell input keyevent KEYCODE_BACK; sleep 1; tapText 待办; sleep 2; tapText 课表; shot 09-table-no-reimport 3
 # 液态玻璃透镜：着色器编译 / 绘制失败会记在 ZhishiGlass
 adb logcat -d -s ZhishiGlass > shots/glass.txt; cat shots/glass.txt | tail -5
+# 待办小部件的滑动列表：直接跑 RemoteViewsFactory（TodoRows）取每一行并 inflate；待办小部件预览存成 PNG 拉下来
+adb shell am start -n $P/.MainActivity --ez seed true --ez wrows true > /dev/null; sleep 5
+adb logcat -d -s ZhishiTest | grep "WROWS\|WMAIN\|WPREV" | tee shots/wrows.txt
+grep -q "WROWS ok" shots/wrows.txt || { echo "todo widget rows failed"; fail=1; }
+for f in wprev-4-demo wprev-2-demo wprev-4-real wprev-2-real; do adb pull /sdcard/Android/data/$P/files/$f.png shots/$f.png > /dev/null 2>&1 || true; done
 go table:0; sleep 1
 
 # 应用图标：回桌面，打开应用列表

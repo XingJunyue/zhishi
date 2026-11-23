@@ -5,5 +5,5 @@
     <string name="w_course">Le cours actuel et le suivant aujourd\'hui</string>
     <string name="w_todo4_name">Zhishi · Tâches 4×2</string>
     <string name="w_todo2_name">Zhishi · Tâches 2×2</string>
-    <string name="w_todo">Vos tâches à venir, par échéance</string>
+    <string name="w_todo">Toutes vos tâches par échéance, à faire défiler dans le widget</string>
 </resources>

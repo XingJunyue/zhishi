@@ -16,6 +16,9 @@ import android.os.Bundle
 import android.text.TextPaint
 import android.text.TextUtils
 import android.widget.RemoteViews
+import android.widget.RemoteViewsService
+import android.net.Uri
+import android.view.View
 import java.time.LocalDate
 
 /** 课程等级的标签颜色（水课 / 普通 / 重要），课表和小部件共用。 */
@@ -61,6 +64,7 @@ object CourseWidgets {
     private val KAO_DONE = listOf("(๑•̀ㅂ•́)و✧", "ヽ(°▽°)ノ ✿", "(ﾉ´ヮ`)ﾉ*: ･ﾟ", "o(≧▽≦)o ♪")
 
     private var lastSig = ""
+    private var lastTodoSig = ""
     private var lastMin = -1
 
     /** 改课、改设置、换皮肤后调用：出错也不影响调用方。 */
@@ -113,7 +117,8 @@ object CourseWidgets {
         if (!force && sig == lastSig) return
         lastSig = sig
         val all = Term.desired(c).filter { it.kind == "course" }
-        if (hasCourse) {
+        // 画图用的是这个对象里的共享画笔和配色，待办列表的行在 RemoteViewsService 的 binder 线程里画，所以加锁
+        if (hasCourse) synchronized(this) {
             val now = plan(list, Term.nowMin())
             for ((ids, wide) in listOf(big to true, small to false)) for (id in ids) {
                 try {
@@ -129,21 +134,57 @@ object CourseWidgets {
         }
         if (hasTodo) {
             val tp = todoPlan(todos, nowMs)
-            // 点一下打开待办页；一条待办都没有时直接打开「添加待办」
-            val empty = tp.list.isEmpty()
-            for ((ids, wide) in listOf(tBig to true, tSmall to false)) for (id in ids) {
-                try {
-                    val o = m.getAppWidgetOptions(id)
-                    val v = RemoteViews(c.packageName, R.layout.widget_course)
-                    v.setImageViewBitmap(R.id.canvas, drawTodo(c, wide, o, tp, all))
-                    v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(c, if (empty) 9 else 8,
-                        Intent(c, MainActivity::class.java).putExtra("open", if (empty) "todo:1" else "todo").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
-                        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
-                    m.updateAppWidget(id, v)
-                } catch (x: Exception) { android.util.Log.w("Zhishi", "待办小部件画不出来：${x.message}") }
+            // 待办小部件和分钟无关（头上只有日期）：只在待办 / 日期 / 状态 / 样式变了时重画，免得每分钟把列表滚回顶上
+            val tsig = "${Term.todayEpoch()}|${todos.hashCode()}|${tp.overdue}|${tp.today}|${Term.desired(c).hashCode()}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${WidgetStyle.tint(c)}|${WidgetStyle.clear(c)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
+            if (force || tsig != lastTodoSig) {
+                lastTodoSig = tsig
+                for ((ids, wide) in listOf(tBig to true, tSmall to false)) for (id in ids) {
+                    try {
+                        val o = m.getAppWidgetOptions(id)
+                        m.updateAppWidget(id, todoViews(c, id, wide, o, tp, all))
+                    } catch (x: Exception) { android.util.Log.w("Zhishi", "待办小部件画不出来：${x.message}") }
+                }
+                // 列表里的每一行由 TodoWidgetService 提供：通知桌面重新取一遍
+                try { m.notifyAppWidgetViewDataChanged(tBig + tSmall, R.id.list) } catch (x: Exception) { android.util.Log.w("Zhishi", "待办列表刷新失败：${x.message}") }
             }
         }
     }
+
+    /**
+     * 一个待办小部件的 RemoteViews：底图（玻璃卡 + 头部）+ 一个可以上下滑动的列表（ListView，行由 [TodoWidgetService] 画），
+     * 所有安卓版本 / 桌面都支持。没有待办时不显示列表，整张底图就是颜文字空状态。
+     */
+    fun todoViews(c: Context, id: Int, wide: Boolean, o: Bundle?, tp: TodoNow, all: List<Slot>): RemoteViews {
+        val v = RemoteViews(c.packageName, R.layout.widget_todo)
+        val empty = tp.list.isEmpty()
+        val g = synchronized(this) {
+            v.setImageViewBitmap(R.id.canvas, drawTodo(c, wide, o, tp, all, rows = false))
+            geo(c, o, wide)
+        }
+        // 点空白处 / 头部：打开待办页；一条待办都没有时直接打开「添加待办」
+        v.setOnClickPendingIntent(R.id.root, PendingIntent.getActivity(c, if (empty) 9 else 8,
+            Intent(c, MainActivity::class.java).putExtra("open", if (empty) "todo:1" else "todo").addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP),
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        if (empty) { v.setViewVisibility(R.id.list, View.GONE); return v }
+        v.setViewVisibility(R.id.list, View.VISIBLE)
+        val svc = Intent(c, TodoWidgetService::class.java).putExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, id).putExtra(TodoWidgetService.WIDE, wide)
+        // data 带上小部件 id，每个小部件各用一个 factory（否则系统按 Intent 复用，4×2 和 2×2 会串）
+        svc.data = Uri.parse(svc.toUri(Intent.URI_INTENT_SCHEME))
+        @Suppress("DEPRECATION")
+        v.setRemoteAdapter(R.id.list, svc)
+        // 列表放在底图里头部下面那块：设计稿单位 × 缩放 × 密度 = 像素
+        val px = g.k * c.resources.displayMetrics.density
+        val pad = rowPad(wide)
+        v.setViewPadding(R.id.list, (pad * px).toInt(), (ROW_TOP * px).toInt(), (pad * px).toInt(), (rowBottom(wide) * px).toInt())
+        // 点任意一行：打开待办页（和点小部件其他地方一样）。模板要可变，系统才能把每行的 fill-in 合进去
+        val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (android.os.Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
+        v.setPendingIntentTemplate(R.id.list, PendingIntent.getActivity(c, 10,
+            Intent(c, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP), flags))
+        return v
+    }
+
+    /** 每一行点下去时合进模板的 Intent。 */
+    fun rowFillIn(): Intent = Intent().putExtra("open", "todo")
 
     // ---------------- 画图 ----------------
     // 颜色跟着当前皮肤（浅色 / 深色）走，每次画之前从皮肤取
@@ -184,7 +225,7 @@ object CourseWidgets {
             val b = Slot("demo2", tr("大学英语"), setOf(Term.weekday()), m + 35, m + 80, 1, room = tr("外语楼 305"))
             all = listOf(a, b); now = plan(all, m)
         }
-        return draw(c, wide, null, now, all)
+        return synchronized(this) { draw(c, wide, null, now, all) }
     }
 
     // ---------------- 待办小部件 ----------------
@@ -207,9 +248,9 @@ object CourseWidgets {
     }
 
     /** 小部件页的实时预览：和桌面上画法完全一样；没有待办时用几条示例。 */
-    fun previewTodo(c: Context, wide: Boolean): Bitmap {
+    fun previewTodo(c: Context, wide: Boolean, demo: Boolean = false): Bitmap {
         val now = System.currentTimeMillis()
-        var tp = todoPlan(TodoStore.all(c), now)
+        var tp = todoPlan(if (demo) emptyList() else TodoStore.all(c), now)
         if (tp.list.isEmpty()) {
             val day = Todos.dayOfMs(now)
             tp = todoPlan(listOf(
@@ -218,7 +259,7 @@ object CourseWidgets {
                 Todo("demo3", tr("背单词"), "", -1L, created = 3),
             ), now)
         }
-        return drawTodo(c, wide, null, tp, Term.desired(c).filter { it.kind == "course" })
+        return synchronized(this) { drawTodo(c, wide, null, tp, Term.desired(c).filter { it.kind == "course" }, rows = true) }
     }
 
     /** 左边竖条的颜色：关联了课就用那门课的颜色，否则已过期用「重要」的暖色、其余用主色。 */
@@ -238,65 +279,70 @@ object CourseWidgets {
 
     private fun todoDue(t: Todo): String = if (t.due < 0) tr("没有截止时间") else dueText(t.due, t.allDay)
 
-    private fun todoWide(c: Context, d: D, w: Float, h: Float, tp: TodoNow, all: List<Slot>) {
-        val t = tp.list[0]; val p = 15f; val L = p; val R = w - p
-        val st = todoState(t, tp.now)
-        d.text(header() + " · " + tr("待办"), L, 11f, 11f, SUB, maxW = w * 0.55f)
-        val right = (if (tp.overdue > 0) tr("已过期 {0} 项", tp.overdue) + " · " else "") + tr("共 {0} 项", tp.list.size)
-        d.text(right, R, 11f, 11f, if (tp.overdue > 0) LevelTag.fg(2, DARK) else SUB, align = 2, maxW = w * 0.42f)
-        val next = tp.list.getOrNull(1)
-        val nextH = if (next != null) 46f else 0f
-        val top = 33f
-        val bottom = h - p - (if (next != null) nextH + 10f else 0f)
-        val (_, deepC) = todoBar(t, st, all)
-        d.round(L, top + 2f, L + 4f, bottom - 2f, 2f, deepC)
-        val cx = L + 12f
-        val (ct, cf, cb) = todoChip(st)
-        val cr = R - d.chip(ct, R, top + 1f, 9.5f, cf, cb, true, right = true) - 6f
-        d.text(t.title, cx, top - 2f, 17f, INK, true, maxW = cr - cx - 4f)
-        // 截止时间 · 关联课程
-        val f = 11f; var x = cx; val y = top + 25f
-        d.clock(x, y + 1.5f, if (st == 0) LevelTag.fg(2, DARK) else SUB); x += 14f
-        x += d.text(todoDue(t), x, y - 1f, f, if (st == 0) LevelTag.fg(2, DARK) else INK, maxW = R - x) + 14f
-        if (t.course.isNotBlank() && x < R - 40f) { d.book(x, y + 1f, SUB); x += 14f; d.text(t.course, x, y - 1f, f, INK, maxW = R - x) }
-        if (t.note.isNotBlank() && bottom - (top + 44f) >= 12f) d.text(t.note, cx, top + 43f, 10.5f, SUB, maxW = R - cx)
-        // 接下来的一条
-        if (next != null) {
-            val ny = h - p - nextH
-            d.glass(L, ny, R, h - p, 14f, NEXT_BG, WallTint.innerAlpha(CLEAR, DARK))
-            val q = L + 11f
-            val nst = todoState(next, tp.now)
-            d.text(tr("接下来 · 还有 {0} 项", tp.list.size - 1), q, ny + 6f, 10f, NEXT_FG, true, maxW = w * 0.5f)
-            d.text(todoDue(next), R - 11f, ny + 6f, 10f, if (nst == 0) LevelTag.fg(2, DARK) else NEXT_FG, align = 2, maxW = w * 0.4f)
-            val iw = if (next.course.isEmpty()) 0f else minOf(d.width(next.course, 10.5f), (R - q) * 0.4f)
-            d.text(next.title, q, ny + 22f, 12.5f, INK, true, maxW = R - 11f - q - iw - 10f)
-            if (next.course.isNotEmpty()) d.text(next.course, R - 11f, ny + 24f, 10.5f, SUB, align = 2, maxW = iw)
+    // 待办列表的排版（设计稿单位）：头部高 ROW_TOP，列表左右留 rowPad，底下留 rowBottom；每行一块小玻璃，高 rowH，行间 rowGap
+    const val ROW_TOP = 31f
+    fun rowPad(wide: Boolean) = if (wide) 15f else 13f
+    fun rowBottom(wide: Boolean) = if (wide) 12f else 11f
+    fun rowH(wide: Boolean) = if (wide) 50f else 46f
+    fun rowGap(wide: Boolean) = if (wide) 6f else 5f
+
+    /** 待办小部件的头部：4×2 是「周一 11月23日 · 待办」+ 右边过期数 / 总数；2×2 是「待办」+ 总数。 */
+    private fun todoHeader(d: D, w: Float, wide: Boolean, tp: TodoNow) {
+        val red = LevelTag.fg(2, DARK)
+        if (wide) {
+            d.text(header() + " · " + tr("待办"), 15f, 10f, 11f, SUB, maxW = w * 0.55f)
+            val right = (if (tp.overdue > 0) tr("已过期 {0} 项", tp.overdue) + " · " else "") + tr("共 {0} 项", tp.list.size)
+            d.text(right, w - 15f, 10f, 11f, if (tp.overdue > 0) red else SUB, align = 2, maxW = w * 0.42f)
+        } else {
+            val lw = d.text(tr("待办"), 13f, 9.5f, 12f, ACC, true, maxW = w * 0.4f)
+            val right = (if (tp.overdue > 0) tr("已过期 {0} 项", tp.overdue) + " · " else "") + tr("共 {0} 项", tp.list.size)
+            d.text(right, w - 13f, 11f, 9.5f, if (tp.overdue > 0) red else SUB, align = 2, maxW = w - 26f - lw - 6f)
         }
     }
 
-    private fun todoSmall(c: Context, d: D, w: Float, h: Float, tp: TodoNow, all: List<Slot>) {
-        val t = tp.list[0]; val p = 13f; val L = p; val R = w - p
-        val st = todoState(t, tp.now)
+    /**
+     * 列表里的一行：一块小玻璃（和课表小部件「下一节」那块一样），左边关联课程颜色的竖条，标题、状态标签（已过期 / 今天 / 即将），
+     * 截止时间（过期是红字）、关联课程、备注。(x, y) 是左上角，宽 w，高 [rowH]。
+     */
+    private fun todoRow(d: D, x: Float, y: Float, w: Float, t: Todo, st: Int, all: List<Slot>, wide: Boolean) {
+        val h = rowH(wide); val R = x + w
+        val red = LevelTag.fg(2, DARK)
+        d.glass(x + 0.6f, y + 0.6f, R - 0.6f, y + h - 0.6f, if (wide) 14f else 13f, NEXT_BG, WallTint.innerAlpha(CLEAR, DARK))
+        val (_, deep) = todoBar(t, st, all)
         val (ct, cf, cb) = todoChip(st)
-        d.chip(ct, L, p - 2f, 9f, cf, cb, true)
-        d.text(tr("共 {0} 项", tp.list.size), R, p + 1.5f, 9.5f, if (tp.overdue > 0) LevelTag.fg(2, DARK) else ACC, align = 2)
-        val top = 37f
-        val (_, deepC) = todoBar(t, st, all)
-        d.round(L, top + 2f, L + 4f, top + 46f, 2f, deepC)
-        val cx = L + 10f
-        d.text(t.title, cx, top - 3f, 15f, INK, true, maxW = R - cx)
-        d.text(todoDue(t), cx, top + 17f, 10.5f, if (st == 0) LevelTag.fg(2, DARK) else INK, maxW = R - cx)
-        val info = listOf(t.course, t.note).filter { it.isNotBlank() }.joinToString(" · ")
-        if (info.isNotEmpty()) d.text(info, cx, top + 31f, 10.5f, SUB, maxW = R - cx)
-        val ny = top + 55f
-        val nb = h - p
-        if (nb - ny < 26f) return
-        d.glass(L, ny, R, nb, 13f, NEXT_BG, WallTint.innerAlpha(CLEAR, DARK))
-        val nx = tp.list.getOrNull(1)
-        val cy = ny + (nb - ny) / 2
-        if (nx == null) { d.text(tr("只剩这一项啦"), (L + R) / 2, cy - 7f, 10f, NEXT_FG, true, 1, R - L - 12f); return }
-        d.text(tr("接下来") + " · " + todoDue(nx), L + 9f, cy - 15f, 9f, NEXT_FG, true, maxW = R - L - 18f)
-        d.text(nx.title, L + 9f, cy - 1f, 11.5f, INK, true, maxW = R - L - 18f)
+        if (wide) {
+            d.round(x + 9f, y + 9f, x + 12.5f, y + h - 9f, 1.75f, deep)
+            val cx = x + 20f
+            val cr = R - 10f - d.chip(ct, R - 10f, y + 7f, 9f, cf, cb, true, right = true) - 6f
+            d.text(t.title, cx, y + 6f, 13.5f, INK, true, maxW = cr - cx)
+            var tx = cx; val ly = y + 29f
+            d.clock(tx, ly + 0.5f, if (st == 0) red else SUB); tx += 14f
+            tx += d.text(todoDue(t), tx, ly - 1f, 10.5f, if (st == 0) red else INK, maxW = R - 10f - tx) + 12f
+            if (t.course.isNotBlank() && tx < R - 50f) { d.book(tx, ly + 0.5f, SUB); tx += 14f; tx += d.text(t.course, tx, ly - 1f, 10.5f, INK, maxW = R - 10f - tx) + 10f }
+            if (t.note.isNotBlank() && tx < R - 40f) d.text(t.note, tx, ly - 1f, 10.5f, SUB, maxW = R - 10f - tx)
+        } else {
+            d.round(x + 8f, y + 8f, x + 11f, y + h - 8f, 1.5f, deep)
+            val cx = x + 17f
+            d.text(t.title, cx, y + 6f, 12.5f, INK, true, maxW = R - 9f - cx)
+            val cw = d.chip(ct, cx, y + 25f, 8f, cf, cb, true)
+            val info = listOf(todoDue(t), t.course).filter { it.isNotBlank() }.joinToString(" · ")
+            d.text(info, cx + cw + 5f, y + 26f, 9.5f, if (st == 0) red else SUB, maxW = R - 9f - cx - cw - 5f)
+        }
+    }
+
+    /** 桌面上列表的一行画成一张透明底的小图（宽 = 小部件宽减两边留白，高 = 一行 + 行间距；最后一行不带间距）。 */
+    fun todoRowBitmap(c: Context, wide: Boolean, o: Bundle?, t: Todo, now: Long, all: List<Slot>, last: Boolean): Bitmap = synchronized(this) {
+        usePal(c)
+        val g = geo(c, o, wide)
+        val rw = g.lw - 2 * rowPad(wide)
+        val rh = rowH(wide) + (if (last) 0f else rowGap(wide))
+        val s = g.scale * g.k
+        val b = Bitmap.createBitmap((rw * s).toInt().coerceAtLeast(1), (rh * s).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
+        b.density = c.resources.displayMetrics.densityDpi
+        val cv = Canvas(b); cv.scale(s, s)
+        val d = D(cv); d.classic = CLASSIC; d.halo = haloColor()
+        todoRow(d, 0f, 0f, rw, t, todoState(t, now), all, wide)
+        b
     }
 
     private fun todoFree(d: D, w: Float, h: Float, wide: Boolean, done: Boolean) {
@@ -331,12 +377,23 @@ object CourseWidgets {
         }
 
     /** 待办小部件：和课表小部件同一张底（样式、玻璃、透明度、皮肤 / 壁纸配色、尺寸都一样），只是内容不同。 */
-    private fun drawTodo(c: Context, wide: Boolean, o: Bundle?, tp: TodoNow, all: List<Slot>): Bitmap =
+    /** rows = true：把列表的前几行也画进去（小部件页的预览）；桌面上 rows = false，行由列表自己画。 */
+    private fun drawTodo(c: Context, wide: Boolean, o: Bundle?, tp: TodoNow, all: List<Slot>, rows: Boolean): Bitmap =
         canvasFor(c, wide, o, tp.list.isEmpty()) { d, lw, lh ->
-            when {
-                tp.list.isEmpty() -> todoFree(d, lw, lh, wide, tp.allDone)
-                wide -> todoWide(c, d, lw, lh, tp, all)
-                else -> todoSmall(c, d, lw, lh, tp, all)
+            if (tp.list.isEmpty()) todoFree(d, lw, lh, wide, tp.allDone)
+            else {
+                todoHeader(d, lw, wide, tp)
+                if (rows) {
+                    val L = rowPad(wide); val R = lw - rowPad(wide); val top = ROW_TOP; val bottom = lh - rowBottom(wide)
+                    d.cv.save(); d.cv.clipRect(L - 2f, top, R + 2f, bottom)
+                    var y = top
+                    for (t in tp.list) {
+                        if (y >= bottom) break
+                        todoRow(d, L, y, R - L, t, todoState(t, tp.now), all, wide)
+                        y += rowH(wide) + rowGap(wide)
+                    }
+                    d.cv.restore()
+                }
             }
         }
 
@@ -344,13 +401,9 @@ object CourseWidgets {
     private fun canvasFor(c: Context, wide: Boolean, o: Bundle?, free: Boolean, body: (D, Float, Float) -> Unit): Bitmap {
         usePal(c)
         val dm = c.resources.displayMetrics
-        val (wDp, hDp) = sizeDp(c, o, wide)
-        // 设计稿：4×2 是 320×156dp，2×2 是 156×156dp；实际尺寸不同就整体等比缩放，空白处往四周铺开
-        val k = minOf(wDp / (if (wide) 320f else 156f), hDp / 156f).coerceIn(0.72f, 1.35f)
-        val lw = wDp / k; val lh = hDp / k
-        // 按真实尺寸 × 屏幕密度画（以前密度封顶 2.75，桌面再放大一次，字就糊了），一像素对一像素
-        val (bw, bh, scale) = bitmapSize(wDp, hDp, dm.density, dm.widthPixels.toLong() * dm.heightPixels)
-        val b = Bitmap.createBitmap(bw, bh, Bitmap.Config.ARGB_8888)
+        val g = geo(c, o, wide)
+        val k = g.k; val lw = g.lw; val lh = g.lh; val scale = g.scale
+        val b = Bitmap.createBitmap(g.bw, g.bh, Bitmap.Config.ARGB_8888)
         b.density = dm.densityDpi
         // 画布单位 = 设计稿 dp（lw × lh），铺满整张位图
         val cv = Canvas(b); cv.scale(scale * k, scale * k)
@@ -362,8 +415,7 @@ object CourseWidgets {
             d.round(0f, 0f, lw, lh, 22f, if (free) FREE_BG else CREAM)
             faintArt(c, cv, lw, lh)
         } else {
-            // 字不加模糊光晕（会发虚），只有一道 0.7px 的细影：深色玻璃上是暗影、浅色玻璃上是淡白影；玻璃越透影越明显
-            d.halo = withAlpha(if (DARK) 0xFF000000.toInt() else 0xFFFFFFFF.toInt(), WallTint.shadowAlpha(CLEAR, DARK))
+            d.halo = haloColor()
             // 液态玻璃底：很清透的一层（按透明度设置），字区再叠一层局部淡底；顶部水光、底边暗边、左上亮右下淡的亮边。不模糊。
             // 跟随皮肤时再铺一层很淡的皮肤插画；跟随壁纸时不铺（插画和壁纸会打架）
             glassCard(cv, lw, lh)
@@ -374,6 +426,22 @@ object CourseWidgets {
         body(d, lw, lh)
         return b
     }
+
+    /** 小部件的尺寸：实际 dp、设计稿缩放 k、设计稿单位的宽高、位图像素和 dp → 像素比例。 */
+    class Geo(val wDp: Float, val hDp: Float, val k: Float, val lw: Float, val lh: Float, val bw: Int, val bh: Int, val scale: Float)
+
+    fun geo(c: Context, o: Bundle?, wide: Boolean): Geo {
+        val dm = c.resources.displayMetrics
+        val (wDp, hDp) = sizeDp(c, o, wide)
+        // 设计稿：4×2 是 320×156dp，2×2 是 156×156dp；实际尺寸不同就整体等比缩放，空白处往四周铺开
+        val k = minOf(wDp / (if (wide) 320f else 156f), hDp / 156f).coerceIn(0.72f, 1.35f)
+        // 按真实尺寸 × 屏幕密度画（以前密度封顶 2.75，桌面再放大一次，字就糊了），一像素对一像素
+        val (bw, bh, scale) = bitmapSize(wDp, hDp, dm.density, dm.widthPixels.toLong() * dm.heightPixels)
+        return Geo(wDp, hDp, k, wDp / k, hDp / k, bw, bh, scale)
+    }
+
+    /** 字的细影：经典样式没有；液态玻璃只有一道 0.7px 的细影（深色玻璃暗影、浅色玻璃淡白影，玻璃越透越明显），不加模糊光晕。 */
+    private fun haloColor(): Int = if (CLASSIC) 0 else withAlpha(if (DARK) 0xFF000000.toInt() else 0xFFFFFFFF.toInt(), WallTint.shadowAlpha(CLEAR, DARK))
 
     // 皮肤插画的淡淡一层：取插画顶部（主体在右上角）铺满卡片，透明度压低，字在左边不受影响
     private var artId = 0
@@ -744,10 +812,50 @@ class CourseWidget2 : AppWidgetProvider() {
     override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
 }
 
-/** 待办小部件 4×2 / 2×2：和课表小部件同一套画法和刷新（CourseWidgets.update 一起重画）。 */
+/** 待办小部件 4×2 / 2×2：和课表小部件同一张底和刷新（CourseWidgets.update 一起重画），里面是可以滑动的全部待办（TodoWidgetService）。 */
 class TodoWidget4 : AppWidgetProvider() {
     override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
     override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
+}
+
+/**
+ * 待办小部件里可以上下滑动的列表：每行是一张画好的小图（和小部件同一套画法），点一行打开待办页。
+ * 用 RemoteViewsService + ListView，Android 8（minSdk 26）到最新版本、各家桌面都支持。
+ */
+class TodoWidgetService : RemoteViewsService() {
+    companion object { const val WIDE = "wide" }
+    override fun onGetViewFactory(i: Intent): RemoteViewsFactory =
+        TodoRows(applicationContext, i.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID), i.getBooleanExtra(WIDE, true))
+}
+
+class TodoRows(private val c: Context, private val id: Int, private val wide: Boolean) : RemoteViewsService.RemoteViewsFactory {
+    private var tp: CourseWidgets.TodoNow? = null
+    private var all: List<Slot> = emptyList()
+    private var opts: Bundle? = null
+    override fun onCreate() {}
+    /** 桌面收到 notifyAppWidgetViewDataChanged 后在这里重新读待办（binder 线程，可以做重活）。 */
+    override fun onDataSetChanged() {
+        try {
+            tp = CourseWidgets.todoPlan(TodoStore.all(c), System.currentTimeMillis())
+            all = Term.desired(c).filter { it.kind == "course" }
+            opts = if (id == AppWidgetManager.INVALID_APPWIDGET_ID) null else AppWidgetManager.getInstance(c)?.getAppWidgetOptions(id)
+        } catch (x: Throwable) { tp = null; android.util.Log.w("Zhishi", "待办列表读不出来：${x.message}") }
+    }
+    override fun getCount(): Int = tp?.list?.size ?: 0
+    override fun getViewAt(pos: Int): RemoteViews {
+        val v = RemoteViews(c.packageName, R.layout.widget_todo_row)
+        val p = tp ?: return v
+        val t = p.list.getOrNull(pos) ?: return v
+        try { v.setImageViewBitmap(R.id.row, CourseWidgets.todoRowBitmap(c, wide, opts, t, p.now, all, pos == p.list.size - 1)) }
+        catch (x: Throwable) { android.util.Log.w("Zhishi", "待办列表这一行画不出来：${x.message}") }
+        v.setOnClickFillInIntent(R.id.row_root, CourseWidgets.rowFillIn())
+        return v
+    }
+    override fun getLoadingView(): RemoteViews? = null
+    override fun getViewTypeCount(): Int = 1
+    override fun getItemId(pos: Int): Long = pos.toLong()
+    override fun hasStableIds(): Boolean = false
+    override fun onDestroy() {}
 }
 
 class TodoWidget2 : AppWidgetProvider() {

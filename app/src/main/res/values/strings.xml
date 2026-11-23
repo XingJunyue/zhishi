@@ -5,5 +5,5 @@
     <string name="w_course">Today\'s current and next class</string>
     <string name="w_todo4_name">Zhishi · To-do 4×2</string>
     <string name="w_todo2_name">Zhishi · To-do 2×2</string>
-    <string name="w_todo">Your upcoming to-dos, by due time</string>
+    <string name="w_todo">All open to-dos by due time — scroll inside the widget</string>
 </resources>

@@ -187,7 +187,7 @@ fun WidgetScreen() {
         }
         WidgetCard(tr("课表 4×2"), true, canPin) { pin(CourseWidget4::class.java) }
         WidgetCard(tr("课表 2×2"), false, canPin) { pin(CourseWidget2::class.java) }
-        Note(tr("待办小部件：最近要做的一条在上面，下面是接下来的；按截止时间排，过期的在最前。添加、完成、删除待办后马上更新。"))
+        Note(tr("待办小部件：在小部件里上下滑动就能看到全部待办；按截止时间排，过期的在最前。点任意一条打开待办，添加、完成、删除待办后马上更新。"))
         WidgetCard(tr("待办 4×2"), true, canPin, todo = true) { pin(TodoWidget4::class.java) }
         WidgetCard(tr("待办 2×2"), false, canPin, todo = true) { pin(TodoWidget2::class.java) }
         tip?.let { Note(it) }

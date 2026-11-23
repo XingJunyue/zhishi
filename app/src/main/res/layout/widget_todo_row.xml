@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 待办小部件列表的一行：一张画好的小图（宽铺满，高按比例） -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/row_root" android:layout_width="match_parent" android:layout_height="wrap_content">
+    <ImageView android:id="@+id/row" android:layout_width="match_parent" android:layout_height="wrap_content"
+        android:adjustViewBounds="true" android:scaleType="fitCenter"/>
+</FrameLayout>

@@ -15,6 +15,9 @@ import java.io.File
  *                    一分钟后下课 / 今天没课 / 极短的课），并放各种边界待办（全天提醒、提前量、关联到今天已没课的课程、没日期却开着提醒）
  *  --ez notodos true 清空待办（截待办空状态；再 --ez seed true 会放回示例待办）
  *  --es skin <id> / --ei mode 0|1|2   换皮肤 / 深浅色（截图用）
+ *  --ez wrows true   待办小部件的滑动列表：直接跑 TodoRows（RemoteViewsFactory）取每一行、在本进程里 inflate，结果打到 logcat（WROWS ok / FAIL），
+ *                    再把待办小部件预览（示例待办 / 当前待办）存成 PNG 到 app 专属目录（wprev-*.png），冒烟测试拉下来看
+
  *  --es ocr 文件名  识别 app 专属目录里的图片，把结果打到 logcat（标签 ZhishiTest）
  */
 object TestHooks {
@@ -33,6 +36,7 @@ object TestHooks {
         i.getStringExtra("wtint")?.let { WidgetStyle.setTint(c, it) }
         if (i.hasExtra("wclear")) WidgetStyle.setClear(c, i.getIntExtra("wclear", WidgetStyle.CLEAR_DEFAULT))
         i.getStringExtra("wallpaper")?.let { wallpaper(c, it == "dark") }
+        if (i.getBooleanExtra("wrows", false)) widgetRows(c)
         // 教程：--ez notour true 全部当看过（冒烟测试不被挡住）；--es tour first|new 直接弹出来截图
         if (i.getBooleanExtra("notour", false)) Tour.skipAll(c)
         i.getStringExtra("tour")?.let { Tour.show.value = it }
@@ -49,6 +53,39 @@ object TestHooks {
                 else { Log.i("ZhishiTest", "OCR OK ${r.size}"); r.forEach { Log.i("ZhishiTest", "OCR ROW ${it.days.first()}|${it.name}|${it.from}|${it.to}") } }
             }
         }
+    }
+
+    private fun widgetRows(c: Context) {
+        var ok = true
+        for (wide in listOf(true, false)) {
+            try {
+                val f = TodoRows(c, android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID, wide)
+                f.onCreate(); f.onDataSetChanged()
+                val n = f.getCount()
+                val parent = android.widget.FrameLayout(c)
+                val wPx = ((if (wide) 290 else 130) * c.resources.displayMetrics.density).toInt()
+                val hs = (0 until n).map { pos ->
+                    val v = f.getViewAt(pos).apply(c, parent)
+                    v.measure(android.view.View.MeasureSpec.makeMeasureSpec(wPx, android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(0, android.view.View.MeasureSpec.UNSPECIFIED))
+                    v.measuredHeight
+                }
+                Log.i("ZhishiTest", "WROWS wide=$wide n=$n heights=$hs")
+                if (hs.any { it <= 0 }) ok = false
+                f.onDestroy()
+            } catch (x: Throwable) { ok = false; Log.i("ZhishiTest", "WROWS FAIL wide=$wide ${x.javaClass.name}: ${x.message}") }
+            try {
+                val tp = CourseWidgets.todoPlan(TodoStore.all(c), System.currentTimeMillis())
+                val rv = CourseWidgets.todoViews(c, android.appwidget.AppWidgetManager.INVALID_APPWIDGET_ID, wide, null, tp, Term.desired(c).filter { it.kind == "course" })
+                Log.i("ZhishiTest", "WMAIN wide=$wide built n=${tp.list.size}")
+                try { rv.apply(c, android.widget.FrameLayout(c)); Log.i("ZhishiTest", "WMAIN wide=$wide inflated") }
+                catch (x: Throwable) { Log.i("ZhishiTest", "WMAIN wide=$wide inflate skipped ${x.javaClass.name}: ${x.message}") }
+            } catch (x: Throwable) { ok = false; Log.i("ZhishiTest", "WROWS FAIL main wide=$wide ${x.javaClass.name}: ${x.message}") }
+            for (demo in listOf(true, false)) try {
+                val b = CourseWidgets.previewTodo(c, wide, demo)
+                File(c.getExternalFilesDir(null), "wprev-${if (wide) 4 else 2}-${if (demo) "demo" else "real"}.png").outputStream().use { b.compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it) }
+            } catch (x: Throwable) { Log.i("ZhishiTest", "WPREV FAIL ${x.message}") }
+        }
+        Log.i("ZhishiTest", if (ok) "WROWS ok" else "WROWS FAIL")
     }
 
     private fun seed(c: Context) {

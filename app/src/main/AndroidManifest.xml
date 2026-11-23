@@ -43,6 +43,9 @@
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/w_todo2" />
         </receiver>
+        <!-- 待办小部件里可以滑动的列表：桌面通过系统绑定这个服务取每一行 -->
+        <service android:name=".TodoWidgetService" android:exported="false"
+            android:permission="android.permission.BIND_REMOTEVIEWS" />
         <!-- 小部件到点重画（下一分钟 / 上下课 / 0 点）；改时间、时区、开机后也重画 -->
         <receiver android:name=".WidgetTick" android:exported="false">
             <intent-filter>
