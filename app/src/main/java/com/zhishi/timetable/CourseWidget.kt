@@ -101,8 +101,8 @@ object CourseWidgets {
         ids.joinToString(",") { id -> val (w, h) = try { sizeDp(c, m.getAppWidgetOptions(id), wide) } catch (x: Exception) { 0f to 0f }; "$id:${w.toInt()}x${h.toInt()}" }
 
     /** 样式相关的签名（皮肤、深浅、样式、玻璃颜色、透明度、壁纸颜色、语言）。 */
-    private fun styleSig(c: Context): String =
-        "${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${WidgetStyle.tint(c)}|${WidgetStyle.clear(c)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
+    private fun styleSig(c: Context, kind: String): String =
+        "${Tr.lang}|${WidgetStyle.pal(c, kind).hashCode()}|${WidgetStyle.classic(c, kind)}|${WidgetStyle.tint(c, kind)}|${WidgetStyle.clear(c, kind)}|${WidgetStyle.mode(c, kind)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
 
     /**
      * 安排下一次重画（时刻由 [nextTick] 算）：课表小部件今天还有课（上课中要显示剩余时间）就在下一分钟，没课了就到明天 0 点；
@@ -149,7 +149,8 @@ object CourseWidgets {
         val todos = if (hasTodo) TodoStore.all(c) else emptyList()
         val nowMs = System.currentTimeMillis()
         schedule(c, nextTick(nowMs, hasCourse, list, Term.nowMin(), hasTodo, todos))
-        val style = styleSig(c)
+        // 课表、待办小部件的外观各自设置，各自的签名
+        val style = styleSig(c, WidgetStyle.COURSE)
         val all = Term.desired(c).filter { it.kind == "course" }
         // 课表小部件的签名不含待办（以前改一条待办也会把课表小部件整张重画）
         val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.weekNow(c)}|${Term.desired(c).hashCode()}|${Term.secStarts(c)}|${Term.secEnds(c)}|${Term.widgetLevel(c)}|$style|${sizesSig(c, m, big, true)}|${sizesSig(c, m, small, false)}"
@@ -174,7 +175,7 @@ object CourseWidgets {
             val tp = todoPlan(todos, nowMs)
             // 待办小部件和分钟无关（头上只有日期）：头部（数量 / 日期 / 样式 / 尺寸）变了才 updateAppWidget，
             // 只是行的内容变了就只通知列表重新取行（不重新绑定列表，桌面不用整个重建）
-            val base = "${Term.todayEpoch()}|$style|${Term.desired(c).hashCode()}|${sizesSig(c, m, tBig, true)}|${sizesSig(c, m, tSmall, false)}"
+            val base = "${Term.todayEpoch()}|${styleSig(c, WidgetStyle.TODO)}|${Term.desired(c).hashCode()}|${sizesSig(c, m, tBig, true)}|${sizesSig(c, m, tSmall, false)}"
             val head = "$base|${tp.list.size}|${tp.overdue}|${tp.today}|${tp.allDone}"
             val rows = "$base|${tp.list.hashCode()}|${tp.list.map { todoState(it, nowMs) }}"
             val headDirty = force || head != lastTodoSig
@@ -248,12 +249,13 @@ object CourseWidgets {
     private var WALL = false
     private var CLEAR = WidgetStyle.CLEAR_DEFAULT
     private lateinit var PAL: Pal
-    private fun usePal(c: Context) {
-        CLASSIC = WidgetStyle.classic(c)
-        CLEAR = WidgetStyle.clear(c)
-        val wall = if (!CLASSIC && WidgetStyle.followWall(c)) WallTint.read(c) else null
+    /** kind = 课表 / 待办小部件（外观各自设置）。 */
+    private fun usePal(c: Context, kind: String) {
+        CLASSIC = WidgetStyle.classic(c, kind)
+        CLEAR = WidgetStyle.clear(c, kind)
+        val wall = if (!CLASSIC && WidgetStyle.followWall(c, kind)) WallTint.read(c) else null
         WALL = wall != null
-        val p = if (wall != null) WallTint.pal(wall, Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null))) else Skins.palFor(c)
+        val p = if (wall != null) WallTint.pal(wall, Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null))) else WidgetStyle.pal(c, kind)
         PAL = p; DARK = p.dark
         INK = p.i(p.ink); SUB = p.i(p.soft); ACC = p.i(p.deep); ACC_PALE = p.i(p.pale); ON_ACC = p.i(p.onAcc)
         CREAM = p.i(p.bg); FREE_BG = p.i(p.card); NEXT_BG = p.i(p.sagePale); NEXT_FG = p.i(p.sageInk)
@@ -381,7 +383,7 @@ object CourseWidgets {
 
     /** 桌面上列表的一行画成一张透明底的小图（宽 = 小部件宽减两边留白，高 = 一行 + 行间距；最后一行不带间距）。 */
     fun todoRowBitmap(c: Context, wide: Boolean, o: Bundle?, t: Todo, now: Long, all: List<Slot>, last: Boolean): Bitmap = synchronized(this) {
-        usePal(c)
+        usePal(c, WidgetStyle.TODO)
         val g = geo(c, o, wide)
         val rw = g.lw - 2 * rowPad(wide)
         val rh = rowH(wide) + (if (last) 0f else rowGap(wide))
@@ -428,7 +430,7 @@ object CourseWidgets {
     }
 
     private fun draw(c: Context, wide: Boolean, o: Bundle?, now: Now, all: List<Slot>): Bitmap =
-        canvasFor(c, wide, o, now.main == null) { d, lw, lh ->
+        canvasFor(c, wide, o, now.main == null, WidgetStyle.COURSE) { d, lw, lh ->
             when {
                 now.main == null -> freeCard(d, lw, lh, wide, now.doneAll)
                 wide -> wideCard(c, d, lw, lh, now, all)
@@ -439,7 +441,7 @@ object CourseWidgets {
     /** 待办小部件：和课表小部件同一张底（样式、玻璃、透明度、皮肤 / 壁纸配色、尺寸都一样），只是内容不同。 */
     /** rows = true：把列表的前几行也画进去（小部件页的预览）；桌面上 rows = false，行由列表自己画。 */
     private fun drawTodo(c: Context, wide: Boolean, o: Bundle?, tp: TodoNow, all: List<Slot>, rows: Boolean): Bitmap =
-        canvasFor(c, wide, o, tp.list.isEmpty()) { d, lw, lh ->
+        canvasFor(c, wide, o, tp.list.isEmpty(), WidgetStyle.TODO) { d, lw, lh ->
             if (tp.list.isEmpty()) todoFree(d, lw, lh, wide, tp.allDone)
             else {
                 todoHeader(d, lw, wide, tp)
@@ -458,8 +460,8 @@ object CourseWidgets {
         }
 
     /** 画一张小部件：底（经典 / 液态玻璃）画好后交给 body 画内容，画布单位 = 设计稿 dp。free = 空状态（经典样式用白卡底）。 */
-    private fun canvasFor(c: Context, wide: Boolean, o: Bundle?, free: Boolean, body: (D, Float, Float) -> Unit): Bitmap {
-        usePal(c)
+    private fun canvasFor(c: Context, wide: Boolean, o: Bundle?, free: Boolean, kind: String, body: (D, Float, Float) -> Unit): Bitmap {
+        usePal(c, kind)
         val dm = c.resources.displayMetrics
         val g = geo(c, o, wide)
         val k = g.k; val lw = g.lw; val lh = g.lh; val scale = g.scale
@@ -842,27 +844,59 @@ object WidgetStyle {
     const val GLASS = "glass"
     const val CLASSIC = "classic"
     val ALL = listOf(GLASS to "液态玻璃", CLASSIC to "经典")
+    /** 课表小部件 / 待办小部件：外观各自设置（课表用原来的键，待办用 todo_ 开头的键）。 */
+    const val COURSE = "course"
+    const val TODO = "todo"
+    val KINDS = listOf(COURSE, TODO)
     private fun p(c: Context) = c.getSharedPreferences("widget", Context.MODE_PRIVATE)
     private fun str(c: Context, k: String): String? = try { p(c).getString(k, null) } catch (x: ClassCastException) { null }
-    fun get(c: Context): String = norm(str(c, "style"))
+    private fun int(c: Context, k: String, d: Int): Int = try { p(c).getInt(k, d) } catch (x: ClassCastException) { d }
+    /** 键名（纯函数）：课表用原来的键，待办加 todo_ 前缀。 */
+    fun key(kind: String, k: String) = if (kind == TODO) "todo_$k" else k
+    /** 升级来的：待办小部件第一次读设置时，把原来（两种小部件共用）的设置抄一份过去，外观不变。 */
+    private fun migrate(c: Context, kind: String) {
+        if (kind != TODO) return
+        val pr = p(c)
+        if (pr.contains("todo_init")) return
+        val e = pr.edit()
+        str(c, "style")?.let { e.putString("todo_style", it) }
+        str(c, "tint")?.let { e.putString("todo_tint", it) }
+        if (pr.contains("clear")) e.putInt("todo_clear", int(c, "clear", CLEAR_DEFAULT))
+        if (pr.contains("dmode")) e.putInt("todo_dmode", int(c, "dmode", 0))
+        e.putBoolean("todo_init", true).apply()
+    }
+    private fun read(c: Context, kind: String, k: String): String? { migrate(c, kind); return str(c, key(kind, k)) }
+
+    fun get(c: Context, kind: String = COURSE): String = norm(read(c, kind, "style"))
     fun norm(v: String?): String = if (v == CLASSIC) CLASSIC else GLASS
-    fun classic(c: Context) = get(c) == CLASSIC
-    /** 换样式：存下来并立刻重画所有小部件。 */
-    fun set(c: Context, v: String) { p(c).edit().putString("style", norm(v)).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
+    fun classic(c: Context, kind: String = COURSE) = get(c, kind) == CLASSIC
+    /** 换样式：存下来并立刻重画（两种小部件都重画，各按各的设置）。 */
+    fun set(c: Context, v: String, kind: String = COURSE) { migrate(c, kind); p(c).edit().putString(key(kind, "style"), norm(v)).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
 
     /** 液态玻璃的颜色来源：跟随壁纸（默认）/ 跟随皮肤。`tint` = wall | skin。经典样式不受影响，始终跟皮肤。 */
     const val WALL = "wall"
     const val SKIN = "skin"
     val TINTS = listOf(WALL to "跟随壁纸", SKIN to "跟随皮肤")
-    fun tint(c: Context): String = if (str(c, "tint") == SKIN) SKIN else WALL
-    fun followWall(c: Context) = tint(c) == WALL
-    fun setTint(c: Context, v: String) { p(c).edit().putString("tint", if (v == SKIN) SKIN else WALL).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
+    fun tint(c: Context, kind: String = COURSE): String = if (read(c, kind, "tint") == SKIN) SKIN else WALL
+    fun followWall(c: Context, kind: String = COURSE) = tint(c, kind) == WALL
+    fun setTint(c: Context, v: String, kind: String = COURSE) { migrate(c, kind); p(c).edit().putString(key(kind, "tint"), if (v == SKIN) SKIN else WALL).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
 
     /** 玻璃透明度 0..100（%），默认 65（build-21 起上限 100，拉满 = 导航条那么透）。 */
     const val CLEAR_DEFAULT = 65
-    fun clear(c: Context): Int = (try { p(c).getInt("clear", CLEAR_DEFAULT) } catch (x: ClassCastException) { CLEAR_DEFAULT }).coerceIn(0, WallTint.MAX)
+    fun clear(c: Context, kind: String = COURSE): Int { migrate(c, kind); return int(c, key(kind, "clear"), CLEAR_DEFAULT).coerceIn(0, WallTint.MAX) }
     /** 改透明度：马上存、预览马上变；redraw = false 时先不重画桌面（拖动滑块中途），松手后再重画。 */
-    fun setClear(c: Context, v: Int, redraw: Boolean = true) { p(c).edit().putInt("clear", v.coerceIn(0, WallTint.MAX)).apply(); ver.value++; if (redraw) CourseWidgets.safeUpdate(c) }
+    fun setClear(c: Context, v: Int, redraw: Boolean = true, kind: String = COURSE) { migrate(c, kind); p(c).edit().putInt(key(kind, "clear"), v.coerceIn(0, WallTint.MAX)).apply(); ver.value++; if (redraw) CourseWidgets.safeUpdate(c) }
+
+    /** 深浅：0 跟随 App（皮肤的浅色 / 深色设置）、1 浅色、2 深色。跟随壁纸的玻璃按壁纸自动选深浅，不看这个。 */
+    val MODES = listOf("跟随 App", "浅色", "深色")
+    fun mode(c: Context, kind: String = COURSE): Int { migrate(c, kind); return int(c, key(kind, "dmode"), 0).let { if (it in 0..2) it else 0 } }
+    fun setMode(c: Context, v: Int, kind: String = COURSE) { migrate(c, kind); p(c).edit().putInt(key(kind, "dmode"), v.coerceIn(0, 2)).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
+    /** 这种小部件用的皮肤配色（当前皮肤 + 自己的深浅设置）。 */
+    fun pal(c: Context, kind: String = COURSE): Pal {
+        val s = Skins.byId(try { c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null) } catch (x: ClassCastException) { null })
+        val dark = when (mode(c, kind)) { 1 -> false; 2 -> true; else -> Skins.palFor(c).dark }
+        return if (dark) s.dark else s.light
+    }
     val ver = androidx.compose.runtime.mutableStateOf(0)
 }
 

@@ -34,10 +34,10 @@ object TestHooks {
             .putInt("need", i.getIntExtra("fakeneed", 0)).putString("needNotes", "测试用的更新说明").putLong("checked", System.currentTimeMillis()).apply()
         i.getStringExtra("skin")?.let { Skins.setSkin(c, Skins.byId(it)) }
         if (i.hasExtra("mode")) Skins.setMode(c, i.getIntExtra("mode", 0))
-        i.getStringExtra("wtint")?.let { WidgetStyle.setTint(c, it) }
-        if (i.hasExtra("wclear")) WidgetStyle.setClear(c, i.getIntExtra("wclear", WidgetStyle.CLEAR_DEFAULT))
+        i.getStringExtra("wtint")?.let { v -> WidgetStyle.KINDS.forEach { WidgetStyle.setTint(c, v, it) } }
+        if (i.hasExtra("wclear")) WidgetStyle.KINDS.forEach { WidgetStyle.setClear(c, i.getIntExtra("wclear", WidgetStyle.CLEAR_DEFAULT), kind = it) }
         i.getStringExtra("wallpaper")?.let { wallpaper(c, it == "dark") }
-        i.getStringExtra("wstyle")?.let { WidgetStyle.set(c, it) }
+        i.getStringExtra("wstyle")?.let { v -> WidgetStyle.KINDS.forEach { WidgetStyle.set(c, v, it) } }
         if (i.getBooleanExtra("wrows", false)) widgetRows(c, i.getStringExtra("wtag") ?: "")
         // 教程：--ez notour true 全部当看过（冒烟测试不被挡住）；--es tour first|new 直接弹出来截图
         if (i.getBooleanExtra("notour", false)) Tour.skipAll(c)

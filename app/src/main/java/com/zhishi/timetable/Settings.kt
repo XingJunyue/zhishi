@@ -182,34 +182,50 @@ fun WidgetScreen() {
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
         Text(tr("上面是正在上的课（课间就是最近的下一节），下面是再下一节；今天没课就是一张白卡。"),
             fontSize = 13.sp, color = C.Soft, lineHeight = 20.sp, modifier = Modifier.padding(top = 14.dp, start = 4.dp, end = 4.dp))
-        // 小部件样式：液态玻璃 / 经典（改版前的实心皮肤底），换了马上重画桌面上的小部件
-        val sv = WidgetStyle.ver.value
-        val style = remember(sv) { WidgetStyle.get(c) }
-        SectionTitle(tr("小部件样式"), tr("经典样式始终跟着皮肤换色"))
-        Segments(WidgetStyle.ALL.map { tr(it.second) }, WidgetStyle.ALL.indexOfFirst { it.first == style }.coerceAtLeast(0)) { i -> WidgetStyle.set(c, WidgetStyle.ALL[i].first) }
-        if (style == WidgetStyle.GLASS) {
-            // 液态玻璃：颜色跟随壁纸 / 皮肤，透明度可调（拖动时预览跟着变，松手才写入并重画桌面上的小部件）
-            val tint = remember(sv) { WidgetStyle.tint(c) }
-            SectionTitle(tr("玻璃颜色"), tr("跟随壁纸：按壁纸的主色自动选深浅、色调和文字颜色"))
-            Segments(WidgetStyle.TINTS.map { tr(it.second) }, WidgetStyle.TINTS.indexOfFirst { it.first == tint }.coerceAtLeast(0)) { i -> WidgetStyle.setTint(c, WidgetStyle.TINTS[i].first) }
-            if (tint == WidgetStyle.WALL && remember(sv) { WallTint.read(c) } == null)
-                Note(tr("这台手机没有提供壁纸颜色（Android 8.1 以下或动态壁纸），先按皮肤配色。"))
-            val clear = remember(sv) { WidgetStyle.clear(c) }
-            var moved by remember { mutableStateOf(0) }
-            LaunchedEffect(moved) { if (moved > 0) { kotlinx.coroutines.delay(400); CourseWidgets.safeUpdate(c) } }
-            Column(Modifier.padding(top = 10.dp)) { StepSlider(tr("透明度"), clear, 0..WallTint.MAX, 5, "%") { if (it != clear) { WidgetStyle.setClear(c, it, redraw = false); moved++ } } }
-            Note(tr("桌面小部件看不到身后壁纸的像素，做不了真正的折射；这里是按壁纸配色，让玻璃和壁纸更搭。"))
-        }
+        // 课表、待办小部件的外观各自设置（样式、玻璃颜色、透明度、深浅），改哪种就按哪种的设置重画
+        SectionTitle(tr("课表小部件"), tr("外观和待办小部件分开设置"))
+        WidgetLook(WidgetStyle.COURSE)
         WidgetCard(tr("课表 4×2"), true, canPin) { pin(CourseWidget4::class.java) }
         WidgetCard(tr("课表 2×2"), false, canPin) { pin(CourseWidget2::class.java) }
+        SectionTitle(tr("待办小部件"), tr("外观和课表小部件分开设置"))
         Note(tr("待办小部件：在小部件里上下滑动就能看到全部待办；按截止时间排，过期的在最前。点任意一条打开待办，添加、完成、删除待办后马上更新。"))
+        WidgetLook(WidgetStyle.TODO)
         WidgetCard(tr("待办 4×2"), true, canPin, todo = true) { pin(TodoWidget4::class.java) }
         WidgetCard(tr("待办 2×2"), false, canPin, todo = true) { pin(TodoWidget2::class.java) }
+        Note(tr("桌面小部件看不到身后壁纸的像素，做不了真正的折射；这里是按壁纸配色，让玻璃和壁纸更搭。"))
         tip?.let { Note(it) }
         Note(tr("小部件上的「重要 / 普通 / 水课」标签可以在「设置 → 学期与显示」里关掉。"))
         Note(tr("小部件上的时间不走？在系统设置里给知时允许「自启动 / 后台活动」，电池使用选「不限制」：不少安卓手机划掉 App 后会停掉小部件刷新。"))
         Spacer(Modifier.height(40.dp))
     }
+}
+
+/** 一种小部件（课表 / 待办）的外观：样式、玻璃颜色、透明度、深浅。 */
+@Composable
+private fun WidgetLook(kind: String) {
+    val c = LocalContext.current
+    val sv = WidgetStyle.ver.value
+    val style = remember(sv) { WidgetStyle.get(c, kind) }
+    Text(tr("小部件样式"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(start = 4.dp, bottom = 6.dp))
+    Segments(WidgetStyle.ALL.map { tr(it.second) }, WidgetStyle.ALL.indexOfFirst { it.first == style }.coerceAtLeast(0)) { i -> WidgetStyle.set(c, WidgetStyle.ALL[i].first, kind) }
+    val tint = remember(sv) { WidgetStyle.tint(c, kind) }
+    if (style == WidgetStyle.GLASS) {
+        // 液态玻璃：颜色跟随壁纸 / 皮肤，透明度可调（拖动时预览跟着变，松手才写入并重画桌面上的小部件）
+        Text(tr("玻璃颜色"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 6.dp))
+        Segments(WidgetStyle.TINTS.map { tr(it.second) }, WidgetStyle.TINTS.indexOfFirst { it.first == tint }.coerceAtLeast(0)) { i -> WidgetStyle.setTint(c, WidgetStyle.TINTS[i].first, kind) }
+        if (tint == WidgetStyle.WALL && remember(sv) { WallTint.read(c) } == null)
+            Note(tr("这台手机没有提供壁纸颜色（Android 8.1 以下或动态壁纸），先按皮肤配色。"))
+        val clear = remember(sv) { WidgetStyle.clear(c, kind) }
+        var moved by remember { mutableStateOf(0) }
+        LaunchedEffect(moved) { if (moved > 0) { kotlinx.coroutines.delay(400); CourseWidgets.safeUpdate(c) } }
+        Column(Modifier.padding(top = 4.dp)) { StepSlider(tr("透明度"), clear, 0..WallTint.MAX, 5, "%") { if (it != clear) { WidgetStyle.setClear(c, it, redraw = false, kind = kind); moved++ } } }
+    }
+    // 深浅：跟随 App / 浅色 / 深色（跟随壁纸的玻璃按壁纸自动选深浅）
+    if (style == WidgetStyle.CLASSIC || tint == WidgetStyle.SKIN) {
+        val mode = remember(sv) { WidgetStyle.mode(c, kind) }
+        Text(tr("深浅"), fontSize = 13.sp, color = C.Soft, modifier = Modifier.padding(start = 4.dp, top = 12.dp, bottom = 6.dp))
+        Segments(listOf(tr("跟随 App"), tr("浅色"), tr("深色")), mode) { WidgetStyle.setMode(c, it, kind) }
+    } else Text(tr("跟随壁纸时，深浅按壁纸自动选"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(start = 4.dp, top = 8.dp))
 }
 
 @Composable
@@ -222,7 +238,8 @@ private fun WidgetCard(title: String, wide: Boolean, canPin: Boolean, todo: Bool
     }
     // 跟随壁纸时：预览底下垫一块按壁纸主色做的渐变（App 读不到壁纸本身，只能用它的颜色模拟）
     val wall = remember(WidgetStyle.ver.value, WallTint.ver.value) {
-        if (!WidgetStyle.classic(c) && WidgetStyle.followWall(c)) WallTint.read(c) else null
+        val k = if (todo) WidgetStyle.TODO else WidgetStyle.COURSE
+        if (!WidgetStyle.classic(c, k) && WidgetStyle.followWall(c, k)) WallTint.read(c) else null
     }
     SoftCard(Modifier.fillMaxWidth().padding(top = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {

@@ -29,6 +29,9 @@ class CourseWidgetTest {
     }
     @Test fun styleNorm() {
         assertEquals("glass", WidgetStyle.norm(null)); assertEquals("glass", WidgetStyle.norm("x")); assertEquals("classic", WidgetStyle.norm("classic"))
+        // 课表 / 待办小部件各自的设置：课表沿用原来的键（老用户设置不丢），待办用 todo_ 前缀
+        assertEquals("clear", WidgetStyle.key(WidgetStyle.COURSE, "clear")); assertEquals("todo_clear", WidgetStyle.key(WidgetStyle.TODO, "clear"))
+        assertEquals("style", WidgetStyle.key(WidgetStyle.COURSE, "style")); assertEquals("todo_tint", WidgetStyle.key(WidgetStyle.TODO, "tint"))
     }
 
     // 待办小部件：过期的在前，再今天、之后、没设截止；全做完 / 一条没有分得开
