@@ -27,21 +27,31 @@ data class Todo(
     val id: String, val title: String, val note: String = "", val due: Long = -1L, val remind: Boolean = false,
     val course: String = "", val done: Boolean = false, val doneAt: Long = 0L, val created: Long = 0L,
     val allDay: Boolean = false, val before: Int = 0,
+    /** 置顶：没完成时排在所有待办最上面（待办页和小部件都一样）。 */
+    val pin: Boolean = false,
+    /** 手动顺序（同一组里拖动排过的，1、2、3…）；0 = 没手动排过，按默认顺序排在这一组最前面。老数据没有这两个字段 = 不置顶、没排过。 */
+    val order: Int = 0,
 ) {
     fun json(): JSONObject = JSONObject().put("id", id).put("t", title).put("no", note).put("due", due).put("re", remind)
         .put("co", course).put("dn", done).put("da", doneAt).put("cr", created).put("ad", allDay).put("rb", before)
+        .put("pn", pin).put("or", order)
 
     companion object {
         fun of(j: JSONObject) = Todo(j.optString("id"), j.optString("t"), j.optString("no", ""), j.optLong("due", -1L),
             j.optBoolean("re", false), j.optString("co", ""), j.optBoolean("dn", false), j.optLong("da", 0L), j.optLong("cr", 0L),
-            j.optBoolean("ad", false), j.optInt("rb", 0).coerceIn(0, 7 * 1440))
+            j.optBoolean("ad", false), j.optInt("rb", 0).coerceIn(0, 7 * 1440), j.optBoolean("pn", false), j.optInt("or", 0).coerceAtLeast(0))
     }
 }
 
 /** 纯逻辑（单测用）：序列化、分组、按天归类、快捷时间、提醒时刻。 */
 object Todos {
     /** overdue = 已过期（没完成、截止时间已经过了），今天 = 今天之内还没到的，即将 = 明天以后 + 没设时间的。 */
-    class Groups(val overdue: List<Todo>, val today: List<Todo>, val upcoming: List<Todo>, val done: List<Todo>)
+    class Groups(val pinned: List<Todo>, val overdue: List<Todo>, val today: List<Todo>, val upcoming: List<Todo>, val done: List<Todo>,
+                 /** 所有没完成的里：已过期 / 今天 / 之后各几项（置顶的也按日期算进去，标题和小部件头部用）。 */
+                 val lateN: Int, val todayN: Int, val laterN: Int) {
+        /** 所有没完成的，按显示顺序：置顶 → 已过期 → 今天 → 即将（待办页和小部件共用这一个顺序）。 */
+        val open: List<Todo> get() = pinned + overdue + today + upcoming
+    }
 
     /** 提醒可选的提前量（分钟）。 */
     val BEFORE = listOf(0, 5, 15, 30, 60, 1440)
@@ -78,8 +88,21 @@ object Todos {
         val later = dated.filter { sortKey(it, tz) >= todayEnd }.sortedWith(compareBy({ sortKey(it, tz) }, { it.created })) +
             open.filter { it.due < 0 }.sortedBy { it.created }
         val done = all.filter { it.done }.sortedByDescending { it.doneAt }
-        return Groups(late, today, later, done)
+        // 置顶的单独放最上面；每组里手动排过的按手动顺序，没排过的（order = 0，比如新加的）按默认顺序排在这一组前面
+        fun arrange(l: List<Todo>) = l.sortedBy { it.order }      // sortedBy 是稳定的：order 相同的保持默认顺序
+        val pinned = arrange((late + today + later).filter { it.pin })
+        return Groups(pinned, arrange(late.filter { !it.pin }), arrange(today.filter { !it.pin }), arrange(later.filter { !it.pin }), done,
+            late.size, today.size, later.size)
     }
+
+    /** 拖动排好一组后：这一组按新顺序记 1、2、3…，别的不动。 */
+    fun reorder(all: List<Todo>, ids: List<String>): List<Todo> {
+        val rank = ids.withIndex().associate { it.value to it.index + 1 }
+        return all.map { t -> rank[t.id]?.let { t.copy(order = it) } ?: t }
+    }
+
+    /** 置顶 / 取消置顶：换了一组，手动顺序清零（在新的一组里排最前）。 */
+    fun togglePin(t: Todo): Todo = t.copy(pin = !t.pin, order = 0)
 
     /** 某个时刻在本地时区是哪一天（epoch 天）。 */
     fun dayOfMs(ms: Long, tz: TimeZone = TimeZone.getDefault()): Long = Math.floorDiv(ms + tz.getOffset(ms), DAY_MS)
@@ -206,12 +229,14 @@ object TodoStore {
     private fun p(c: Context) = c.getSharedPreferences("todo", Context.MODE_PRIVATE)
     fun all(c: Context): List<Todo> = Todos.parse(p(c).getString("items", "[]"))
     /** 存下来、通知界面，并立刻重画桌面上的待办小部件（添加 / 完成 / 删除 / 从备份恢复都走这里）。 */
-    fun save(c: Context, l: List<Todo>) { p(c).edit().putString("items", Todos.toJson(l).toString()).apply(); ver.value++; CourseWidgets.safeUpdate(c) }
+    fun save(c: Context, l: List<Todo>) { p(c).edit().putString("items", Todos.toJson(l).toString()).apply(); ver.value++; CourseWidgets.refresh(c) }
     fun put(c: Context, t: Todo) {
         val l = all(c); save(c, if (l.any { it.id == t.id }) l.map { if (it.id == t.id) t else it } else l + t)
         TodoAlarm.sync(c, t)
     }
     fun remove(c: Context, id: String) { save(c, all(c).filter { it.id != id }); TodoAlarm.cancel(c, id) }
+    fun reorder(c: Context, ids: List<String>) = save(c, Todos.reorder(all(c), ids))
+    fun togglePin(c: Context, t: Todo) = save(c, all(c).map { if (it.id == t.id) Todos.togglePin(it) else it })
     fun toggle(c: Context, t: Todo) = put(c, t.copy(done = !t.done, doneAt = if (!t.done) System.currentTimeMillis() else 0L))
     /** 从备份恢复：整体替换。 */
     fun replaceAll(c: Context, l: List<Todo>) { all(c).forEach { TodoAlarm.cancel(c, it.id) }; save(c, l); TodoAlarm.rescheduleAll(c) }

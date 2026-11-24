@@ -153,7 +153,8 @@ object Skins {
     private fun mode(c: Context): Int = (try { p(c).getInt("mode", 0) } catch (x: ClassCastException) { 0 }).let { if (it in 0..2) it else 0 }
     fun sysDark(c: Context) = (c.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES
 
-    fun setSkin(c: Context, s: Skin) { p(c).edit().putString("skin", s.id).apply(); skinState.value = s; CourseWidgets.safeUpdate(c) }
+    /** redraw = false：调用方自己接着重画小部件（小部件刷新里轮换皮肤时）。 */
+    fun setSkin(c: Context, s: Skin, redraw: Boolean = true) { p(c).edit().putString("skin", s.id).apply(); skinState.value = s; if (redraw) CourseWidgets.safeUpdate(c) }
     fun setMode(c: Context, m: Int) { p(c).edit().putInt("mode", m).apply(); modeState.value = m; CourseWidgets.safeUpdate(c) }
 
     /** 当前是不是深色（mode：0 跟随系统、1 浅色、2 深色）。 */
@@ -201,3 +202,68 @@ fun courseTone(pair: Pair<Color, Color>, dark: Boolean, card: Color): Pair<Color
 }
 fun courseToneArgb(pair: Pair<Int, Int>, pal: Pal): Pair<Int, Int> =
     if (!pal.dark) pair else courseTone(Color(pair.first) to Color(pair.second), true, Color(pal.card)).let { it.first.toArgb() to it.second.toArgb() }
+
+/**
+ * 皮肤收藏和自动轮换（SharedPreferences `look`）：`fav` = 收藏的皮肤 id（逗号分隔，按收藏先后）；
+ * `rot` = 0 关闭 / 1 全部随机 / 2 收藏轮换（按收藏顺序一套接一套）；`rotEvery` = 0 每次打开 / 1 每天（默认）/ 2 每周；
+ * `rotAt` = 上次换的那个周期（天 / 周的编号）。界面和小部件一起换（每天 / 每周的在小部件 0 点刷新时也会换，不用打开 App）。
+ */
+object SkinRotation {
+    const val OFF = 0; const val ALL = 1; const val FAV = 2
+    const val OPEN = 0; const val DAY = 1; const val WEEK = 2
+    /** 界面读：收藏 / 设置变了马上重组。 */
+    val ver = mutableStateOf(0)
+
+    private fun p(c: Context) = c.getSharedPreferences("look", Context.MODE_PRIVATE)
+    private fun int(c: Context, k: String, d: Int) = try { p(c).getInt(k, d) } catch (x: ClassCastException) { d }
+
+    fun favs(c: Context): List<String> = parseFavs(try { p(c).getString("fav", null) } catch (x: ClassCastException) { null })
+    fun parseFavs(raw: String?): List<String> = (raw ?: "").split(',').map { it.trim() }.filter { id -> id.isNotEmpty() && Skins.ALL.any { it.id == id } }.distinct()
+    fun isFav(c: Context, id: String) = id in favs(c)
+    fun toggleFav(c: Context, id: String) {
+        val l = favs(c); val n = if (id in l) l - id else l + id
+        p(c).edit().putString("fav", n.joinToString(",")).apply(); ver.value++
+    }
+
+    fun mode(c: Context) = int(c, "rot", OFF).let { if (it in OFF..FAV) it else OFF }
+    fun every(c: Context) = int(c, "rotEvery", DAY).let { if (it in OPEN..WEEK) it else DAY }
+    /** 改设置：从现在这个周期开始算（打开后下一个周期才换，不会一打开就跳）。 */
+    fun setMode(c: Context, m: Int) { p(c).edit().putInt("rot", m.coerceIn(OFF, FAV)).putLong("rotAt", period(every(c), Term.todayEpoch())).apply(); ver.value++ }
+    fun setEvery(c: Context, e: Int) { val v = e.coerceIn(OPEN, WEEK); p(c).edit().putInt("rotEvery", v).putLong("rotAt", period(v, Term.todayEpoch())).apply(); ver.value++ }
+
+    /** 周期编号（纯函数）：每天 = epoch 天；每周 = 从周一开始的周编号；每次打开没有周期。 */
+    fun period(every: Int, day: Long): Long = when (every) { DAY -> day; WEEK -> Math.floorDiv(day + 3, 7L); else -> -1L }
+
+    /**
+     * 下一套皮肤（纯函数）：全部随机 = 除了当前这套随便挑一套；收藏轮换 = 收藏里当前这套的下一套（当前不在收藏里就从第一套开始）。
+     * 没得换（关闭、收藏为空、只收藏了当前这一套）返回 null。
+     */
+    fun pick(mode: Int, favs: List<String>, all: List<String>, cur: String, rnd: Int): String? = when (mode) {
+        ALL -> (all - cur).let { if (it.isEmpty()) null else it[Math.floorMod(rnd, it.size)] }
+        FAV -> if (favs.isEmpty()) null else favs[(favs.indexOf(cur) + 1) % favs.size].takeIf { it != cur }
+        else -> null
+    }
+
+    /** 这个周期该不该换（纯函数）。 */
+    fun due(every: Int, last: Long, day: Long): Boolean = every != OPEN && period(every, day) != last
+
+    private fun rotate(c: Context, redraw: Boolean): Boolean {
+        val cur = Skins.byId(try { p(c).getString("skin", null) } catch (x: ClassCastException) { null }).id
+        val next = pick(mode(c), favs(c), Skins.ALL.map { it.id }, cur, kotlin.random.Random.nextInt(1 shl 20)) ?: return false
+        Skins.setSkin(c, Skins.byId(next), redraw)
+        return true
+    }
+
+    /** 冷启动打开 App：「每次打开」就换一套。 */
+    fun onLaunch(c: Context) { if (mode(c) != OFF && every(c) == OPEN) rotate(c, true) }
+
+    /** 打开 App / 小部件刷新时：「每天 / 每周」到了新的周期就换。返回换了没有。 */
+    fun onTick(c: Context, redraw: Boolean = false): Boolean {
+        if (mode(c) == OFF) return false
+        val e = every(c); val day = Term.todayEpoch()
+        val last = try { p(c).getLong("rotAt", Long.MIN_VALUE) } catch (x: ClassCastException) { Long.MIN_VALUE }
+        if (!due(e, last, day)) return false
+        p(c).edit().putLong("rotAt", period(e, day)).apply()
+        return rotate(c, redraw)
+    }
+}

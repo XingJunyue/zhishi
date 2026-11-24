@@ -17,12 +17,19 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.zIndex
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -66,23 +73,32 @@ fun TodoScreen() {
     val now = remember(tick) { System.currentTimeMillis() }
     val g = remember(all, now) { Todos.group(all, now) }
     var edit by remember { mutableStateOf<Pair<Todo, Boolean>?>(null) }
+    // 排序模式：拖右边的把手调整顺序、点图钉置顶 / 取消置顶
+    var sorting by remember { mutableStateOf(false) }
     fun newTodo() = Todo("t" + System.currentTimeMillis(), "", created = System.currentTimeMillis())
     // 冒烟测试：todo:1 打开新建，todo:2 打开第一条
     LaunchedEffect(Nav.subState.value) {
         when (Nav.sub) {
             1 -> { edit = newTodo() to true; Nav.sub = 0 }
-            2 -> { (g.overdue + g.today + g.upcoming + g.done).firstOrNull()?.let { edit = it to false }; Nav.sub = 0 }
+            2 -> { (g.open + g.done).firstOrNull()?.let { edit = it to false }; Nav.sub = 0 }
         }
     }
     Column(Modifier.fillMaxSize()) {
         Row(Modifier.fillMaxWidth().padding(start = 22.dp, end = 16.dp, top = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(tr("待办"), fontSize = 30.sp, fontWeight = FontWeight.Bold, color = C.Ink)
-                Text(if (g.overdue.isEmpty() && g.today.isEmpty() && g.upcoming.isEmpty()) tr("都做完啦")
-                    else (if (g.overdue.isNotEmpty()) tr("已过期 {0} 项", g.overdue.size) + " · " else "") + tr("今天 {0} 项 · 之后 {1} 项", g.today.size, g.upcoming.size),
+                Text(if (g.open.isEmpty()) tr("都做完啦")
+                    else (if (g.lateN > 0) tr("已过期 {0} 项", g.lateN) + " · " else "") + tr("今天 {0} 项 · 之后 {1} 项", g.todayN, g.laterN),
                     fontSize = 14.sp, color = C.Soft, modifier = Modifier.padding(top = 2.dp))
             }
-            Box(Modifier.size(42.dp).glassButton(CircleShape) { edit = newTodo() to true },
+            if (g.open.size > 1 || sorting) {
+                Box(Modifier.padding(end = 10.dp).size(42.dp).glassButton(CircleShape, tint = C.Clay, fill = if (sorting) C.Clay.copy(alpha = 0.85f) else null) { sorting = !sorting },
+                    contentAlignment = Alignment.Center) {
+                    Icon(if (sorting) Icons.Filled.Check else Icons.Filled.Menu, if (sorting) tr("完成排序") else tr("排序和置顶"),
+                        tint = if (sorting) C.OnClay else C.Ink, modifier = Modifier.size(21.dp))
+                }
+            }
+            if (!sorting) Box(Modifier.size(42.dp).glassButton(CircleShape) { edit = newTodo() to true },
                 contentAlignment = Alignment.Center) { Icon(Icons.Filled.Add, tr("添加待办"), tint = C.Ink, modifier = Modifier.size(22.dp)) }
         }
         if (all.isEmpty()) {
@@ -94,7 +110,8 @@ fun TodoScreen() {
                     textAlign = androidx.compose.ui.text.style.TextAlign.Center, modifier = Modifier.padding(top = 6.dp, bottom = 14.dp))
                 PrimaryButton(tr("添加待办")) { edit = newTodo() to true }
             }
-        } else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 110.dp)) {
+        } else if (sorting) TodoSortList(g, now)
+        else LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 110.dp)) {
             fun section(title: String, l: List<Todo>) {
                 if (l.isEmpty()) return
                 item(key = "h$title") {
@@ -105,6 +122,7 @@ fun TodoScreen() {
                 }
                 items(l, key = { it.id }) { t -> TodoRow(t, now, onToggle = { TodoStore.toggle(c, t) }, onOpen = { edit = t to false }, onDelete = { TodoStore.remove(c, t.id) }) }
             }
+            section(tr("置顶"), g.pinned)
             section(tr("已过期"), g.overdue)
             section(tr("今天"), g.today)
             section(tr("即将"), g.upcoming)
@@ -128,8 +146,11 @@ fun TodoRow(t: Todo, now: Long, onToggle: () -> Unit, onOpen: () -> Unit, onDele
             Box(Modifier.size(24.dp).clip(CircleShape).background(if (t.done) C.Clay else Color.Transparent).border(1.8.dp, ring, CircleShape).clickable { onToggle() },
                 contentAlignment = Alignment.Center) { if (t.done) Text("✓", fontSize = 13.sp, color = C.OnClay, fontWeight = FontWeight.Bold) }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(t.title, fontSize = 15.sp, color = if (t.done) C.Faint else C.Ink, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
-                    textDecoration = if (t.done) TextDecoration.LineThrough else null)
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (t.pin && !t.done) PinMark(C.Clay, Modifier.padding(end = 5.dp))
+                    Text(t.title, fontSize = 15.sp, color = if (t.done) C.Faint else C.Ink, fontWeight = FontWeight.Medium, maxLines = 2, overflow = TextOverflow.Ellipsis,
+                        textDecoration = if (t.done) TextDecoration.LineThrough else null)
+                }
                 val sub = listOfNotNull(dueText(t.due, t.allDay).ifEmpty { null }, t.note.ifBlank { null }).joinToString(" · ")
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 3.dp)) {
                     if (late) Text(tr("已过期"), fontSize = 11.sp, color = Color.White, fontWeight = FontWeight.SemiBold,
@@ -240,6 +261,7 @@ fun TodoSheet(start: Todo, isNew: Boolean, onSave: (Todo) -> Unit, onDelete: () 
                 }
             }
             hint?.let { Note(it, warm = true) }
+            if (!t.done) Toggle(tr("置顶"), tr("排在所有待办最上面，桌面小部件里也一样"), t.pin) { on -> t = t.copy(pin = on, order = 0) }
 
             if (!isNew) {
                 Spacer(Modifier.height(14.dp))
@@ -318,4 +340,85 @@ private fun CourseChip(t: String, on: Boolean, onClick: () -> Unit) {
         modifier = Modifier.padding(top = 8.dp, end = 8.dp).widthIn(max = 200.dp)
             .glassButton(RoundedCornerShape(12.dp), tint = C.Clay, fill = if (on) C.Clay.copy(alpha = 0.92f) else C.Sand.copy(alpha = 0.9f), shadow = 0.dp) { onClick() }
             .padding(horizontal = 12.dp, vertical = 7.dp))
+}
+
+/** 置顶的小图钉（待办页的行、排序模式的按钮）。 */
+@Composable
+fun PinMark(col: Color, modifier: Modifier = Modifier, size: androidx.compose.ui.unit.Dp = 13.dp) {
+    androidx.compose.foundation.Canvas(modifier.size(size)) {
+        val w = this.size.width; val h = this.size.height
+        rotate(35f) {
+            // 圆头 + 针身 + 针尖
+            drawRoundRect(col, topLeft = androidx.compose.ui.geometry.Offset(w * 0.30f, h * 0.06f), size = androidx.compose.ui.geometry.Size(w * 0.40f, h * 0.40f),
+                cornerRadius = androidx.compose.ui.geometry.CornerRadius(w * 0.12f))
+            drawRect(col, topLeft = androidx.compose.ui.geometry.Offset(w * 0.18f, h * 0.44f), size = androidx.compose.ui.geometry.Size(w * 0.64f, h * 0.10f))
+            drawLine(col, androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.52f), androidx.compose.ui.geometry.Offset(w * 0.5f, h * 0.96f), strokeWidth = w * 0.10f,
+                cap = androidx.compose.ui.graphics.StrokeCap.Round)
+        }
+    }
+}
+
+/**
+ * 排序模式：没完成的待办按组列出（置顶 / 已过期 / 今天 / 即将），按住右边的把手上下拖动调整同一组里的顺序，
+ * 点左边的图钉置顶 / 取消置顶。顺序存在待办里，桌面小部件一样。
+ */
+@Composable
+private fun TodoSortList(g: Todos.Groups, now: Long) {
+    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(start = 16.dp, end = 16.dp, top = 4.dp, bottom = 110.dp)) {
+        Text(tr("按住右边的把手上下拖动调整顺序，点图钉置顶"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(start = 6.dp, top = 6.dp))
+        SortSection(tr("置顶"), g.pinned, now)
+        SortSection(tr("已过期"), g.overdue, now)
+        SortSection(tr("今天"), g.today, now)
+        SortSection(tr("即将"), g.upcoming, now)
+    }
+}
+
+private val SORT_ROW = 60.dp
+private val SORT_GAP = 8.dp
+
+@Composable
+private fun SortSection(title: String, list: List<Todo>, now: Long) {
+    if (list.isEmpty()) return
+    val c = LocalContext.current
+    var ids by remember(list) { mutableStateOf(list.map { it.id }) }
+    val byId = remember(list) { list.associateBy { it.id } }
+    var dragId by remember { mutableStateOf<String?>(null) }
+    var dy by remember { mutableStateOf(0f) }
+    val step = with(androidx.compose.ui.platform.LocalDensity.current) { (SORT_ROW + SORT_GAP).toPx() }
+    Text(title, fontSize = 15.sp, fontWeight = FontWeight.Bold, color = C.Ink, modifier = Modifier.padding(start = 6.dp, top = 16.dp, bottom = 6.dp))
+    for (id in ids) {
+        val t = byId[id] ?: continue
+        key(id) {
+            val dragging = dragId == id
+            Row(Modifier.padding(vertical = SORT_GAP / 2).fillMaxWidth().height(SORT_ROW)
+                .zIndex(if (dragging) 1f else 0f)
+                .graphicsLayer { translationY = if (dragging) dy else 0f; val k = if (dragging) 1.02f else 1f; scaleX = k; scaleY = k }
+                .liquidGlass(RoundedCornerShape(18.dp)).padding(start = 6.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(Modifier.size(40.dp).clip(CircleShape).clickable { TodoStore.togglePin(c, t) }, contentAlignment = Alignment.Center) {
+                    PinMark(if (t.pin) C.Clay else C.Faint.copy(alpha = 0.6f), size = 18.dp)
+                }
+                Column(Modifier.weight(1f).padding(start = 4.dp)) {
+                    Text(t.title, fontSize = 15.sp, color = C.Ink, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    val sub = if (t.due < 0) tr("没有截止时间") else dueText(t.due, t.allDay)
+                    Text(sub, fontSize = 12.sp, color = if (Todos.overdue(t, now)) Color(0xFFC2603F) else C.Soft, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                }
+                // 拖动把手
+                Box(Modifier.size(44.dp).pointerInput(id) {
+                    detectDragGestures(
+                        onDragStart = { dragId = id; dy = 0f },
+                        onDragEnd = { dragId = null; dy = 0f; TodoStore.reorder(c, ids) },
+                        onDragCancel = { dragId = null; dy = 0f },
+                    ) { ch, d ->
+                        ch.consume()
+                        dy += d.y
+                        val i = ids.indexOf(id)
+                        if (dy > step / 2 && i < ids.size - 1) { ids = ids.toMutableList().apply { add(i + 1, removeAt(i)) }; dy -= step }
+                        else if (dy < -step / 2 && i > 0) { ids = ids.toMutableList().apply { add(i - 1, removeAt(i)) }; dy += step }
+                    }
+                }, contentAlignment = Alignment.Center) {
+                    Icon(Icons.Filled.Menu, tr("拖动排序"), tint = C.Soft, modifier = Modifier.size(22.dp))
+                }
+            }
+        }
+    }
 }

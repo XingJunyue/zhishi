@@ -65,10 +65,44 @@ object CourseWidgets {
 
     private var lastSig = ""
     private var lastTodoSig = ""
-    private var lastMin = -1
+    private var lastRowSig = ""
 
-    /** 改课、改设置、换皮肤后调用：出错也不影响调用方。 */
-    fun safeUpdate(c: Context) { try { update(c) } catch (x: Throwable) {} }
+    // ---- 合并刷新 ----
+    // 以前每次调用都立刻整张重画、updateAppWidget（会让桌面重新绑定待办列表、重新取每一行的图），
+    // 打开 App、壁纸配色回调、桌面发尺寸变化等一连串触发时，桌面一直在重绑 / 解码大图，就卡。
+    // 现在：0.3 秒内的多次请求合成一次；只有内容 / 样式 / 尺寸真的变了才重画（签名比较）。
+    @Volatile private var app: Context? = null
+    @Volatile private var pendingForce = false
+    private val main by lazy { android.os.Handler(android.os.Looper.getMainLooper()) }
+    private val flush = Runnable {
+        val c = app ?: return@Runnable
+        val f = pendingForce; pendingForce = false
+        try { update(c, f) } catch (x: Throwable) { android.util.Log.w("Zhishi", "小部件重画失败", x) }
+    }
+    private fun post(c: Context, force: Boolean) {
+        try {
+            app = c.applicationContext ?: c
+            if (force) pendingForce = true
+            main.removeCallbacks(flush); main.postDelayed(flush, 300L)
+        } catch (x: Throwable) {}
+    }
+
+    /** 改课、改设置、换皮肤后调用（用户主动改的：强制重画）：出错也不影响调用方。 */
+    fun safeUpdate(c: Context) = post(c, true)
+
+    /** 系统发来的 onUpdate（新加了小部件 / 定时）：马上按签名重画（新小部件的 id 不在签名里，一定会画）。 */
+    fun refreshNow(c: Context) { try { update(c) } catch (x: Throwable) {} }
+
+    /** 可能没变的触发（打开 App、待办存盘、壁纸配色回调、桌面发来的更新 / 尺寸变化）：合并后只在签名变了时重画。 */
+    fun refresh(c: Context) = post(c, false)
+
+    /** 小部件的尺寸也算进签名：桌面改了大小才重画，同样的尺寸反复发来不重画。 */
+    private fun sizesSig(c: Context, m: AppWidgetManager, ids: IntArray, wide: Boolean): String =
+        ids.joinToString(",") { id -> val (w, h) = try { sizeDp(c, m.getAppWidgetOptions(id), wide) } catch (x: Exception) { 0f to 0f }; "$id:${w.toInt()}x${h.toInt()}" }
+
+    /** 样式相关的签名（皮肤、深浅、样式、玻璃颜色、透明度、壁纸颜色、语言）。 */
+    private fun styleSig(c: Context): String =
+        "${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${WidgetStyle.tint(c)}|${WidgetStyle.clear(c)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
 
     /**
      * 安排下一次重画（时刻由 [nextTick] 算）：课表小部件今天还有课（上课中要显示剩余时间）就在下一分钟，没课了就到明天 0 点；
@@ -100,7 +134,7 @@ object CourseWidgets {
         return at
     }
 
-    fun update(c: Context, force: Boolean = true) {
+    fun update(c: Context, force: Boolean = false) {
         val m = AppWidgetManager.getInstance(c) ?: return
         val big = m.getAppWidgetIds(ComponentName(c, CourseWidget4::class.java))
         val small = m.getAppWidgetIds(ComponentName(c, CourseWidget2::class.java))
@@ -108,17 +142,21 @@ object CourseWidgets {
         val tSmall = m.getAppWidgetIds(ComponentName(c, TodoWidget2::class.java))
         val hasCourse = big.isNotEmpty() || small.isNotEmpty()
         val hasTodo = tBig.isNotEmpty() || tSmall.isNotEmpty()
-        if (!hasCourse && !hasTodo) { schedule(c, null); return }
+        if (!hasCourse && !hasTodo) { schedule(c, null); lastSig = ""; lastTodoSig = ""; lastRowSig = ""; return }
+        // 皮肤轮换（每天 / 每周）：App 没打开时也由小部件的 0 点刷新带着换
+        try { SkinRotation.onTick(c) } catch (x: Throwable) {}
         val list = if (hasCourse) today(c) else emptyList()
         val todos = if (hasTodo) TodoStore.all(c) else emptyList()
         val nowMs = System.currentTimeMillis()
         schedule(c, nextTick(nowMs, hasCourse, list, Term.nowMin(), hasTodo, todos))
-        val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.desired(c).hashCode()}|${todos.hashCode()}|${todoPlan(todos, nowMs).overdue}|${Term.widgetLevel(c)}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${WidgetStyle.tint(c)}|${WidgetStyle.clear(c)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
-        if (!force && sig == lastSig) return
-        lastSig = sig
+        val style = styleSig(c)
         val all = Term.desired(c).filter { it.kind == "course" }
+        // 课表小部件的签名不含待办（以前改一条待办也会把课表小部件整张重画）
+        val sig = "${Term.nowMin()}|${Term.todayEpoch()}|${Term.weekNow(c)}|${Term.desired(c).hashCode()}|${Term.secStarts(c)}|${Term.secEnds(c)}|${Term.widgetLevel(c)}|$style|${sizesSig(c, m, big, true)}|${sizesSig(c, m, small, false)}"
+        val courseDirty = hasCourse && (force || sig != lastSig)
+        if (courseDirty) lastSig = sig
         // 画图用的是这个对象里的共享画笔和配色，待办列表的行在 RemoteViewsService 的 binder 线程里画，所以加锁
-        if (hasCourse) synchronized(this) {
+        if (courseDirty) synchronized(this) {
             val now = plan(list, Term.nowMin())
             for ((ids, wide) in listOf(big to true, small to false)) for (id in ids) {
                 try {
@@ -134,16 +172,23 @@ object CourseWidgets {
         }
         if (hasTodo) {
             val tp = todoPlan(todos, nowMs)
-            // 待办小部件和分钟无关（头上只有日期）：只在待办 / 日期 / 状态 / 样式变了时重画，免得每分钟把列表滚回顶上
-            val tsig = "${Term.todayEpoch()}|${todos.hashCode()}|${tp.overdue}|${tp.today}|${Term.desired(c).hashCode()}|${Tr.lang}|${Skins.palFor(c).hashCode()}|${WidgetStyle.classic(c)}|${WidgetStyle.tint(c)}|${WidgetStyle.clear(c)}|${WallTint.read(c)}|${Skins.byId(c.getSharedPreferences("look", Context.MODE_PRIVATE).getString("skin", null)).id}"
-            if (force || tsig != lastTodoSig) {
-                lastTodoSig = tsig
+            // 待办小部件和分钟无关（头上只有日期）：头部（数量 / 日期 / 样式 / 尺寸）变了才 updateAppWidget，
+            // 只是行的内容变了就只通知列表重新取行（不重新绑定列表，桌面不用整个重建）
+            val base = "${Term.todayEpoch()}|$style|${Term.desired(c).hashCode()}|${sizesSig(c, m, tBig, true)}|${sizesSig(c, m, tSmall, false)}"
+            val head = "$base|${tp.list.size}|${tp.overdue}|${tp.today}|${tp.allDone}"
+            val rows = "$base|${tp.list.hashCode()}|${tp.list.map { todoState(it, nowMs) }}"
+            val headDirty = force || head != lastTodoSig
+            if (headDirty) {
+                lastTodoSig = head
                 for ((ids, wide) in listOf(tBig to true, tSmall to false)) for (id in ids) {
                     try {
                         val o = m.getAppWidgetOptions(id)
                         m.updateAppWidget(id, todoViews(c, id, wide, o, tp, all))
                     } catch (x: Exception) { android.util.Log.w("Zhishi", "待办小部件画不出来：${x.message}") }
                 }
+            }
+            if (headDirty || rows != lastRowSig) {
+                lastRowSig = rows
                 // 列表里的每一行由 TodoWidgetService 提供：通知桌面重新取一遍
                 try { m.notifyAppWidgetViewDataChanged(tBig + tSmall, R.id.list) } catch (x: Exception) { android.util.Log.w("Zhishi", "待办列表刷新失败：${x.message}") }
             }
@@ -234,9 +279,10 @@ object CourseWidgets {
     data class TodoNow(val list: List<Todo>, val overdue: Int, val today: Int, val allDone: Boolean, val now: Long)
 
     fun todoPlan(all: List<Todo>, now: Long, tz: java.util.TimeZone = java.util.TimeZone.getDefault()): TodoNow {
+        // 和待办页同一个分组 / 顺序（置顶 → 已过期 → 今天 → 即将，含没设截止的；每组里按手动顺序），数量也一样
         val g = Todos.group(all, now, tz)
-        val l = g.overdue + g.today + g.upcoming
-        return TodoNow(l, g.overdue.size, g.today.size, l.isEmpty() && g.done.isNotEmpty(), now)
+        val l = g.open
+        return TodoNow(l, g.lateN, g.todayN, l.isEmpty() && g.done.isNotEmpty(), now)
     }
 
     /** 一条待办的状态：0 已过期、1 今天、2 之后、3 没设截止。 */
@@ -315,7 +361,8 @@ object CourseWidgets {
             d.round(x + 9f, y + 8f, x + 12.5f, y + h - 8f, 1.75f, deep)
             val cx = x + 20f
             val cr = R - 10f - d.chip(ct, R - 10f, y + 6f, 9f, cf, cb, true, right = true) - 6f
-            d.text(t.title, cx, y + 5f, 13.5f, INK, true, maxW = cr - cx)
+            val tx0 = if (t.pin) { d.tack(cx - 1f, y + 7.5f, ACC); cx + 12f } else cx
+            d.text(t.title, tx0, y + 5f, 13.5f, INK, true, maxW = cr - tx0)
             var tx = cx; val ly = y + 27f
             d.clock(tx, ly + 0.5f, if (st == 0) red else SUB); tx += 14f
             tx += d.text(todoDue(t), tx, ly - 1f, 10.5f, if (st == 0) red else INK, maxW = R - 10f - tx) + 12f
@@ -324,7 +371,8 @@ object CourseWidgets {
         } else {
             d.round(x + 8f, y + 8f, x + 11f, y + h - 8f, 1.5f, deep)
             val cx = x + 17f
-            d.text(t.title, cx, y + 6f, 12.5f, INK, true, maxW = R - 9f - cx)
+            val tx0 = if (t.pin) { d.tack(cx - 1f, y + 8f, ACC); cx + 11f } else cx
+            d.text(t.title, tx0, y + 6f, 12.5f, INK, true, maxW = R - 9f - tx0)
             val cw = d.chip(ct, cx, y + 25f, 8f, cf, cb, true)
             val info = listOf(todoDue(t), t.course).filter { it.isNotBlank() }.joinToString(" · ")
             d.text(info, cx + cw + 5f, y + 26f, 9.5f, if (st == 0) red else SUB, maxW = R - 9f - cx - cw - 5f)
@@ -338,13 +386,24 @@ object CourseWidgets {
         val rw = g.lw - 2 * rowPad(wide)
         val rh = rowH(wide) + (if (last) 0f else rowGap(wide))
         val s = g.scale * g.k
+        // 同一行内容 + 同一套样式 / 尺寸画过就直接用（桌面重新取行、滚动回来时不用再画）
+        val key = "${t.hashCode()}|${todoState(t, now)}|${Term.todayEpoch()}|$wide|$last|${(rw * s).toInt()}x${(rh * s).toInt()}|${intArrayOf(INK, SUB, ACC, ACC_PALE, ON_ACC, CREAM, NEXT_BG, NEXT_FG, PAL.i(PAL.bg), PAL.i(PAL.acc)).contentHashCode()}|$DARK|$CLEAR|$CLASSIC|$WALL|${Tr.lang}|${all.hashCode()}"
+        rowCache.get(key)?.let { return@synchronized it }
         val b = Bitmap.createBitmap((rw * s).toInt().coerceAtLeast(1), (rh * s).toInt().coerceAtLeast(1), Bitmap.Config.ARGB_8888)
         b.density = c.resources.displayMetrics.densityDpi
         val cv = Canvas(b); cv.scale(s, s)
         val d = D(cv); d.classic = CLASSIC; d.halo = haloColor()
         todoRow(d, 0f, 0f, rw, t, todoState(t, now), all, wide)
+        rowCache.put(key, b)
         b
     }
+
+    /** 画好的行（按字节算，最多约 12MB）。 */
+    private val rowCache = object : android.util.LruCache<String, Bitmap>(12 * 1024 * 1024) {
+        override fun sizeOf(k: String, v: Bitmap) = v.byteCount
+    }
+    /** 透明的 1×1：某一行取不到 / 画不出时也要设一张图，不能让桌面复用的旧行（别的待办）留在那里。 */
+    val blank: Bitmap by lazy { Bitmap.createBitmap(1, 1, Bitmap.Config.ARGB_8888) }
 
     private fun todoFree(d: D, w: Float, h: Float, wide: Boolean, done: Boolean) {
         val day = Term.todayEpoch().toInt()
@@ -649,6 +708,17 @@ object CourseWidgets {
             cv.drawLine(x + 5f, y + 2f, x + 5f, y + 9.8f, p)
             p.style = Paint.Style.FILL
         }
+        /** 置顶的小图钉（约 10×10）。 */
+        fun tack(x: Float, y: Float, col: Int) {
+            cv.save(); cv.rotate(35f, x + 5f, y + 5f)
+            p.style = Paint.Style.FILL; p.color = col
+            cv.drawRoundRect(RectF(x + 3f, y, x + 7f, y + 4.2f), 1.2f, 1.2f, p)
+            cv.drawRect(x + 1.8f, y + 4f, x + 8.2f, y + 5f, p)
+            p.style = Paint.Style.STROKE; p.strokeWidth = 1.1f; p.strokeCap = Paint.Cap.ROUND
+            cv.drawLine(x + 5f, y + 5f, x + 5f, y + 9.8f, p)
+            p.style = Paint.Style.FILL
+            cv.restore()
+        }
         fun spark(x: Float, y: Float, r: Float, col: Int) {
             p.style = Paint.Style.FILL; p.color = col
             val q = r * 0.28f
@@ -804,19 +874,19 @@ class WidgetTick : android.content.BroadcastReceiver() {
 }
 
 class CourseWidget4 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
-    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.refreshNow(c)
+    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.refresh(c)
 }
 
 class CourseWidget2 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
-    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.refreshNow(c)
+    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.refresh(c)
 }
 
 /** 待办小部件 4×2 / 2×2：和课表小部件同一张底和刷新（CourseWidgets.update 一起重画），里面是可以滑动的全部待办（TodoWidgetService）。 */
 class TodoWidget4 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
-    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.refreshNow(c)
+    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.refresh(c)
 }
 
 /**
@@ -830,36 +900,44 @@ class TodoWidgetService : RemoteViewsService() {
 }
 
 class TodoRows(private val c: Context, private val id: Int, private val wide: Boolean) : RemoteViewsService.RemoteViewsFactory {
-    private var tp: CourseWidgets.TodoNow? = null
+    @Volatile private var tp: CourseWidgets.TodoNow? = null
     private var all: List<Slot> = emptyList()
     private var opts: Bundle? = null
-    override fun onCreate() {}
-    /** 桌面收到 notifyAppWidgetViewDataChanged 后在这里重新读待办（binder 线程，可以做重活）。 */
-    override fun onDataSetChanged() {
+    /** 刚建好就读一次（有的桌面先问行数再发 onDataSetChanged），之后每次 onDataSetChanged 重读。 */
+    override fun onCreate() = load()
+    /** 桌面收到 notifyAppWidgetViewDataChanged 后在这里重新读待办（binder 线程，可以做重活）。行数和每一行都来自同一份快照。 */
+    override fun onDataSetChanged() = load()
+    private fun load() {
         try {
-            tp = CourseWidgets.todoPlan(TodoStore.all(c), System.currentTimeMillis())
             all = Term.desired(c).filter { it.kind == "course" }
             opts = if (id == AppWidgetManager.INVALID_APPWIDGET_ID) null else AppWidgetManager.getInstance(c)?.getAppWidgetOptions(id)
+            tp = CourseWidgets.todoPlan(TodoStore.all(c), System.currentTimeMillis())
         } catch (x: Throwable) { tp = null; android.util.Log.w("Zhishi", "待办列表读不出来：${x.message}") }
     }
     override fun getCount(): Int = tp?.list?.size ?: 0
     override fun getViewAt(pos: Int): RemoteViews {
         val v = RemoteViews(c.packageName, R.layout.widget_todo_row)
-        val p = tp ?: return v
-        val t = p.list.getOrNull(pos) ?: return v
-        try { v.setImageViewBitmap(R.id.row, CourseWidgets.todoRowBitmap(c, wide, opts, t, p.now, all, pos == p.list.size - 1)) }
-        catch (x: Throwable) { android.util.Log.w("Zhishi", "待办列表这一行画不出来：${x.message}") }
+        val p = tp
+        val t = p?.list?.getOrNull(pos)
+        // 每次都设一张图：以前取不到 / 画不出时返回空的 RemoteViews，桌面把它套在复用的旧行上，旧行的图（别的待办）就留着——重复的那一行
+        val bmp = if (p == null || t == null) CourseWidgets.blank else try { CourseWidgets.todoRowBitmap(c, wide, opts, t, p.now, all, pos == p.list.size - 1) }
+            catch (x: Throwable) { android.util.Log.w("Zhishi", "待办列表这一行画不出来：${x.message}"); CourseWidgets.blank }
+        v.setImageViewBitmap(R.id.row, bmp)
         v.setOnClickFillInIntent(R.id.row_root, CourseWidgets.rowFillIn())
         return v
     }
     override fun getLoadingView(): RemoteViews? = null
     override fun getViewTypeCount(): Int = 1
-    override fun getItemId(pos: Int): Long = pos.toLong()
-    override fun hasStableIds(): Boolean = false
+    /** 稳定的 id（按待办的 id）：数据变了桌面按 id 对上每一行，不会把旧位置的行套到新位置上。 */
+    override fun getItemId(pos: Int): Long = tp?.list?.getOrNull(pos)?.id?.let { stableId(it) } ?: (Long.MIN_VALUE + pos)
+    override fun hasStableIds(): Boolean = true
     override fun onDestroy() {}
+    companion object {
+        fun stableId(todoId: String): Long { var h = 1125899906842597L; for (ch in todoId) h = 31 * h + ch.code; return h }
+    }
 }
 
 class TodoWidget2 : AppWidgetProvider() {
-    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.safeUpdate(c)
-    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.safeUpdate(c)
+    override fun onUpdate(c: Context, m: AppWidgetManager, ids: IntArray) = CourseWidgets.refreshNow(c)
+    override fun onAppWidgetOptionsChanged(c: Context, m: AppWidgetManager, id: Int, o: Bundle) = CourseWidgets.refresh(c)
 }

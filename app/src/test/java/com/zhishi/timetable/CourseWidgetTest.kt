@@ -50,6 +50,44 @@ class CourseWidgetTest {
         assertTrue(CourseWidgets.todoPlan(listOf(l[4]), now, tz).allDone)
         assertFalse(CourseWidgets.todoPlan(emptyList(), now, tz).allDone)
     }
+    // 真机反馈：App 里 3 条（今天全天的取快递、明年的心理慕课、没设截止的准备雅思），小部件写「共 2 项」、第三行又是取快递。
+    // 小部件的列表、数量和待办页（Todos.group）必须完全一致，没设截止的也在，没有重复。
+    @Test fun todoWidgetMatchesTodoPage() {
+        val now = Todos.at(d0, 10 * 60 + 26, tz)
+        val l = listOf(
+            Todo("kd", "取快递", due = Todos.allDayAt(d0, tz), allDay = true, course = "", note = "顺风", remind = true, created = 1),
+            Todo("xl", "心理慕课", due = Todos.allDayAt(d0 + 433, tz), allDay = true, note = "雨课堂", created = 2),
+            Todo("ys", "准备雅思", created = 3),
+        )
+        val p = CourseWidgets.todoPlan(l, now, tz)
+        val g = Todos.group(l, now, tz)
+        assertEquals(listOf("kd", "xl", "ys"), p.list.map { it.id })
+        assertEquals(g.open.map { it.id }, p.list.map { it.id })
+        assertEquals(3, p.list.size); assertEquals(p.list.size, p.list.map { it.id }.toSet().size)
+        assertEquals(0, p.overdue); assertEquals(1, p.today)
+        assertEquals(listOf(1, 2, 3), p.list.map { CourseWidgets.todoState(it, now, tz) })
+        // 行的 id 稳定、互不相同（桌面按 id 对行，不会把旧位置的行套到新位置）
+        val ids = p.list.map { TodoRows.stableId(it.id) }
+        assertEquals(3, ids.toSet().size); assertEquals(TodoRows.stableId("kd"), TodoRows.stableId("kd"))
+    }
+
+    // 置顶和手动顺序：小部件和待办页一样
+    @Test fun todoWidgetPinsAndOrder() {
+        val now = Todos.at(d0, 700, tz)
+        var l = listOf(
+            Todo("a", "a", due = Todos.at(d0, 900, tz), created = 1),
+            Todo("b", "b", due = Todos.at(d0, 1000, tz), created = 2),
+            Todo("c", "c", created = 3),
+            Todo("late", "late", due = Todos.at(d0, 600, tz), created = 4),
+        )
+        l = l.map { if (it.id == "c") Todos.togglePin(it) else it }
+        l = Todos.reorder(l, listOf("b", "a"))
+        val p = CourseWidgets.todoPlan(l, now, tz)
+        assertEquals(listOf("c", "late", "b", "a"), p.list.map { it.id })
+        assertEquals(Todos.group(l, now, tz).open.map { it.id }, p.list.map { it.id })
+        assertEquals(1, p.overdue); assertEquals(2, p.today)
+    }
+
     @Test fun nextTick() {
         val now = Todos.at(d0, 700, tz) + 20_000L
         val midnight = Todos.at(d0 + 1, 0, tz) + 5_000L

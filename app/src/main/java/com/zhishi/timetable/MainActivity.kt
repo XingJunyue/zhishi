@@ -56,6 +56,8 @@ fun HideBottomBar() {
 class MainActivity : ComponentActivity() {
     override fun onCreate(b: Bundle?) {
         Skins.init(this)
+        // 皮肤轮换「每次打开」：冷启动时换一套（转屏等重建不算）
+        if (b == null) try { SkinRotation.onLaunch(this) } catch (x: Throwable) {}
         super.onCreate(b)
         if (BuildConfig.HOOKS) TestHooks.run(this, intent)
         Tour.init(this)
@@ -83,7 +85,9 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         Skins.sysDarkState.value = Skins.sysDark(this)
-        CourseWidgets.safeUpdate(this)
+        // 皮肤轮换（每次打开 / 每天 / 每周）
+        try { SkinRotation.onTick(this) } catch (x: Throwable) {}
+        CourseWidgets.refresh(this)
     }
 }
 

@@ -14,7 +14,11 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -60,6 +64,7 @@ fun MeScreen(onOpen: (String) -> Unit) {
             SkinPicker()
             Spacer(Modifier.height(12.dp))
             Segments(Skins.MODES.map { tr(it) }, Skins.modeState.value) { Skins.setMode(c, it) }
+            SkinRotationSettings()
         }
 
         SectionTitle(tr("课表"))
@@ -134,6 +139,7 @@ fun SkinPicker() {
     val c = LocalContext.current
     val cur = Skins.skinState.value
     val dark = C.dark
+    val favs = remember(SkinRotation.ver.value) { SkinRotation.favs(c) }
     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(vertical = 2.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
         for (s in Skins.ALL) {
             val on = s.id == cur.id
@@ -141,9 +147,18 @@ fun SkinPicker() {
             val ring by animateColorAsState(if (on) Color(p.acc) else Color.Transparent, label = "ring")
             Column(Modifier.width(52.dp).clip(RoundedCornerShape(16.dp)).clickable { Skins.setSkin(c, s) }.padding(vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally) {
-                Box(Modifier.size(50.dp).border(2.dp, ring, CircleShape).padding(3.5.dp).clip(CircleShape).background(Color(p.bg))) {
-                    val r = s.thumb(dark)
-                    if (r != 0) Image(androidx.compose.ui.res.painterResource(r), tr(s.name), contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                Box(Modifier.size(50.dp)) {
+                    Box(Modifier.fillMaxSize().border(2.dp, ring, CircleShape).padding(3.5.dp).clip(CircleShape).background(Color(p.bg))) {
+                        val r = s.thumb(dark)
+                        if (r != 0) Image(androidx.compose.ui.res.painterResource(r), tr(s.name), contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
+                    }
+                    // 收藏：右下角的小爱心，点一下收藏 / 取消（「收藏轮换」只在收藏的皮肤里换）
+                    val fav = s.id in favs
+                    Box(Modifier.align(Alignment.BottomEnd).offset(x = 1.dp, y = 1.dp).size(21.dp).clip(CircleShape)
+                        .background(C.Card.copy(alpha = 0.92f)).clickable { SkinRotation.toggleFav(c, s.id) }, contentAlignment = Alignment.Center) {
+                        Icon(if (fav) Icons.Filled.Favorite else Icons.Filled.FavoriteBorder, if (fav) tr("取消收藏") else tr("收藏"),
+                            tint = if (fav) Color(0xFFE0607A) else C.Faint, modifier = Modifier.size(13.dp))
+                    }
                 }
                 Text(tr(s.name), fontSize = 13.sp, fontWeight = if (on) FontWeight.Bold else FontWeight.Normal, color = if (on) C.Ink else C.Soft,
                     maxLines = 1, textAlign = TextAlign.Center, modifier = Modifier.padding(top = 5.dp))
@@ -223,5 +238,23 @@ private fun WidgetCard(title: String, wide: Boolean, canPin: Boolean, todo: Bool
             if (bmp != null) Image(bmp, null, contentScale = ContentScale.Fit,
                 modifier = Modifier.fillMaxWidth(if (wide) 1f else 0.5f).aspectRatio(if (wide) 320f / 156f else 1f))
         }
+    }
+}
+
+/** 皮肤轮换：关闭 / 全部随机 / 收藏轮换，多久换一次（每次打开 / 每天 / 每周）。界面和桌面小部件一起换。 */
+@Composable
+fun SkinRotationSettings() {
+    val c = LocalContext.current
+    val v = SkinRotation.ver.value
+    val mode = remember(v) { SkinRotation.mode(c) }
+    val every = remember(v) { SkinRotation.every(c) }
+    val favN = remember(v) { SkinRotation.favs(c).size }
+    Text(tr("皮肤轮换"), fontSize = 14.sp, color = C.Ink, fontWeight = FontWeight.Medium, modifier = Modifier.padding(top = 16.dp, start = 4.dp))
+    Text(tr("自动换皮肤，桌面小部件一起换；点缩略图上的 ♡ 收藏"), fontSize = 12.sp, color = C.Faint, modifier = Modifier.padding(top = 2.dp, bottom = 8.dp, start = 4.dp))
+    Segments(listOf(tr("关闭"), tr("全部随机"), tr("收藏轮换")), mode) { SkinRotation.setMode(c, it) }
+    if (mode != SkinRotation.OFF) {
+        Spacer(Modifier.height(8.dp))
+        Segments(listOf(tr("每次打开"), tr("每天"), tr("每周")), every) { SkinRotation.setEvery(c, it) }
+        if (mode == SkinRotation.FAV && favN < 2) Note(tr("先在上面收藏至少两套皮肤（点 ♡），才能在收藏里轮换"), warm = true)
     }
 }

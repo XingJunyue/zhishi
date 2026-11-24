@@ -138,7 +138,7 @@ object WallTint {
         try {
             val app = c.applicationContext
             android.app.WallpaperManager.getInstance(app)?.addOnColorsChangedListener({ _, which ->
-                if (which and android.app.WallpaperManager.FLAG_SYSTEM != 0) { ver.value++; CourseWidgets.safeUpdate(app) }
+                if (which and android.app.WallpaperManager.FLAG_SYSTEM != 0) { ver.value++; CourseWidgets.refresh(app) }
             }, android.os.Handler(android.os.Looper.getMainLooper()))
             listening = true
         } catch (x: Throwable) {}

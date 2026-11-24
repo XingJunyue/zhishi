@@ -52,6 +52,91 @@ class TodoTest {
         assertTrue(Todos.overdue(l[9], at(day + 1, 0), tz))
     }
 
+    // 置顶：没完成的置顶排最上面（按默认顺序：过期 → 今天 → 之后），其余照旧分组；完成的不算置顶
+    @Test fun pinnedOnTop() {
+        val now = at(day, 700)
+        val l = listOf(
+            Todo("nodue", "没日期", created = 1, pin = true),
+            Todo("tonight", "今晚", due = at(day, 22 * 60), created = 2),
+            Todo("old", "过期", due = at(day - 1, 600), created = 3, pin = true),
+            Todo("tomorrow", "明天", due = at(day + 1, 480), created = 4),
+            Todo("donepin", "完成的", done = true, doneAt = 5, pin = true, created = 5),
+            Todo("late2", "也过期", due = at(day - 2, 600), created = 6),
+        )
+        val g = Todos.group(l, now, tz)
+        assertEquals(listOf("old", "nodue"), g.pinned.map { it.id })
+        assertEquals(listOf("late2"), g.overdue.map { it.id })
+        assertEquals(listOf("tonight"), g.today.map { it.id })
+        assertEquals(listOf("tomorrow"), g.upcoming.map { it.id })
+        assertEquals(listOf("donepin"), g.done.map { it.id })
+        assertEquals(listOf("old", "nodue", "late2", "tonight", "tomorrow"), g.open.map { it.id })
+        // 数量按日期算（置顶的也算进去）：已过期 2、今天 1、之后 2
+        assertEquals(2, g.lateN); assertEquals(1, g.todayN); assertEquals(2, g.laterN)
+    }
+
+    // 手动顺序：组里排过的按手动顺序；没排过的（新加的）按默认顺序排在这一组最前面；置顶 / 取消置顶后在新组里排最前
+    @Test fun manualOrder() {
+        val now = at(day, 700)
+        var l = listOf(
+            Todo("t1", "1", due = at(day, 800), created = 1),
+            Todo("t2", "2", due = at(day, 900), created = 2),
+            Todo("t3", "3", due = at(day, 1000), created = 3),
+            Todo("n1", "无1", created = 4),
+            Todo("n2", "无2", created = 5),
+        )
+        assertEquals(listOf("t1", "t2", "t3"), Todos.group(l, now, tz).today.map { it.id })
+        l = Todos.reorder(l, listOf("t3", "t1", "t2"))
+        assertEquals(listOf("t3", "t1", "t2"), Todos.group(l, now, tz).today.map { it.id })
+        assertEquals(listOf(1, 2, 3), listOf("t3", "t1", "t2").map { id -> l.first { it.id == id }.order })
+        // 新加一条今天的：排在今天组最前，手动排过的顺序不变
+        l = l + Todo("new", "新", due = at(day, 1200), created = 9)
+        assertEquals(listOf("new", "t3", "t1", "t2"), Todos.group(l, now, tz).today.map { it.id })
+        // 别的组不受影响
+        assertEquals(listOf("n1", "n2"), Todos.group(l, now, tz).upcoming.map { it.id })
+        l = Todos.reorder(l, listOf("n2", "n1"))
+        assertEquals(listOf("n2", "n1"), Todos.group(l, now, tz).upcoming.map { it.id })
+        // 置顶：清掉手动顺序，进置顶组；取消置顶回到原来的组最前
+        l = l.map { if (it.id == "t2") Todos.togglePin(it) else it }
+        val g = Todos.group(l, now, tz)
+        assertEquals(listOf("t2"), g.pinned.map { it.id }); assertEquals(0, g.pinned[0].order)
+        assertEquals(listOf("new", "t3", "t1"), g.today.map { it.id })
+        l = l.map { if (it.id == "t2") Todos.togglePin(it) else it }
+        assertEquals(listOf("t2", "new", "t3", "t1"), Todos.group(l, now, tz).today.map { it.id })   // 没排过的两条按时间
+    }
+
+    // 老数据没有 pn / or：不置顶、没排过，顺序和以前一样；新字段能存能读
+    @Test fun pinOrderMigration() {
+        val old = Todos.parse("""[{"id":"a","t":"老的","due":-1,"cr":2},{"id":"b","t":"老的2","due":-1,"cr":1}]""")
+        assertTrue(old.all { !it.pin && it.order == 0 })
+        assertEquals(listOf("b", "a"), Todos.group(old, at(day, 600), tz).upcoming.map { it.id })
+        val t = Todo("x", "新", pin = true, order = 3)
+        assertEquals(t, Todos.parse(Todos.toJson(listOf(t)).toString()).single())
+        assertEquals(0, Todos.parse("""[{"id":"x","t":"坏","or":-5}]""").single().order)
+    }
+
+    // 皮肤轮换：全部随机不会选到当前这套；收藏轮换按收藏顺序一套接一套；周期按天 / 周（周一开始）
+    @Test fun skinRotation() {
+        val all = listOf("a", "b", "c")
+        for (r in 0 until 10) { val n = SkinRotation.pick(SkinRotation.ALL, emptyList(), all, "b", r); assertNotNull(n); assertNotEquals("b", n) }
+        assertNull(SkinRotation.pick(SkinRotation.ALL, emptyList(), listOf("a"), "a", 0))
+        assertNull(SkinRotation.pick(SkinRotation.OFF, all, all, "a", 0))
+        assertEquals("c", SkinRotation.pick(SkinRotation.FAV, listOf("a", "c"), all, "a", 0))
+        assertEquals("a", SkinRotation.pick(SkinRotation.FAV, listOf("a", "c"), all, "c", 0))
+        assertEquals("a", SkinRotation.pick(SkinRotation.FAV, listOf("a", "c"), all, "b", 0))   // 当前不在收藏里：从第一套开始
+        assertNull(SkinRotation.pick(SkinRotation.FAV, emptyList(), all, "a", 0))
+        assertNull(SkinRotation.pick(SkinRotation.FAV, listOf("a"), all, "a", 0))
+        assertEquals("a", SkinRotation.pick(SkinRotation.FAV, listOf("a"), all, "b", 0))
+        // 2025-11-24 是周一（epoch 天 20416）：周一到周日同一周
+        val mon = java.time.LocalDate.of(2025, 11, 24).toEpochDay()
+        assertEquals(SkinRotation.period(SkinRotation.WEEK, mon), SkinRotation.period(SkinRotation.WEEK, mon + 6))
+        assertNotEquals(SkinRotation.period(SkinRotation.WEEK, mon), SkinRotation.period(SkinRotation.WEEK, mon - 1))
+        assertTrue(SkinRotation.due(SkinRotation.DAY, mon - 1, mon)); assertFalse(SkinRotation.due(SkinRotation.DAY, mon, mon))
+        assertFalse(SkinRotation.due(SkinRotation.WEEK, SkinRotation.period(SkinRotation.WEEK, mon), mon + 3))
+        assertTrue(SkinRotation.due(SkinRotation.WEEK, SkinRotation.period(SkinRotation.WEEK, mon), mon + 7))
+        assertFalse(SkinRotation.due(SkinRotation.OPEN, -1, mon))
+        assertEquals(listOf("chunyu"), SkinRotation.parseFavs("chunyu,nope,,chunyu"))
+    }
+
     @Test fun editingTime() {
         val now = at(day, 600)
         val base = Todo("a", "交报告", created = 1)
@@ -191,8 +276,10 @@ class TodoTest {
     }
 
     @Test fun whatsNewNewestIsTodoScroll() {
-        assertEquals("todoscroll", Tour.WHATS_NEW.first().id)
-        val ts = Tour.WHATS_NEW.first().pages.joinToString { it.title + it.body }
+        assertEquals("pinrotate", Tour.WHATS_NEW.first().id)
+        val pr = Tour.WHATS_NEW.first().pages.joinToString { it.title + it.body }
+        assertTrue(pr.contains("置顶") && pr.contains("顺序") && pr.contains("皮肤轮换") && pr.contains("收藏") && pr.contains("待办小部件"))
+        val ts = Tour.WHATS_NEW.first { it.id == "todoscroll" }.pages.joinToString { it.title + it.body }
         assertTrue(ts.contains("待办小部件") && ts.contains("滑动") && ts.contains("4×2") && ts.contains("2×2") && ts.contains("所有"))
         val tw = Tour.WHATS_NEW.first { it.id == "todowidget" }.pages.joinToString { it.title + it.body }
         assertTrue(tw.contains("待办小部件") && tw.contains("4×2") && tw.contains("2×2") && tw.contains("透明度"))
